@@ -589,6 +589,7 @@ class Game {
     this.vx = 0; this.vz = 0;
     this.gameRunning = false;
     document.getElementById('hud').classList.add('hidden');
+    document.getElementById('btn-home').classList.add('hidden');
     document.getElementById('world-clears').classList.add('hidden');
     document.getElementById('mobile-controls').classList.add('hidden');
     document.getElementById('interact-hint').classList.add('hidden');
@@ -644,6 +645,7 @@ class Game {
   start() {
     document.getElementById('title-screen').classList.add('hidden');
     document.getElementById('hud').classList.remove('hidden');
+    document.getElementById('btn-home').classList.remove('hidden');
     document.getElementById('world-clears').classList.remove('hidden');
     if (this.isMobile) document.getElementById('mobile-controls').classList.remove('hidden');
     this.gameRunning = true;
