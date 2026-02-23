@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#2D5A27">
+  <title>マイクラ学習クエスト3D</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- Loading Screen -->
+<div id="loading-screen">
+  <div class="title">マイクラ学習クエスト3D</div>
+  <div id="loading-bar-wrap"><div id="loading-bar"></div></div>
+  <div id="loading-text">読み込み中...</div>
+</div>
+
+<!-- Title Screen -->
+<div id="title-screen" class="hidden">
+  <div class="title-logo">🌍 マイクラ学習クエスト<br>3Dワールド</div>
+  <div class="title-sub">3Dの村を歩きながら学習しよう！</div>
+  <button class="btn-title" id="btn-start">▶ スタート</button>
+  <button class="btn-title" id="btn-continue" style="background:linear-gradient(180deg,#88ccff,#3366aa);box-shadow:0 4px 0 #1a3a77;color:#fff;">つづきから</button>
+</div>
+
+<!-- Three.js Canvas -->
+<canvas id="game-canvas"></canvas>
+
+<!-- HUD -->
+<div id="hud" class="hidden">
+  <div class="hud-level" id="hud-level">Lv.1</div>
+  <div class="hud-xp-wrap">
+    <div class="hud-xp-label">XP: <span id="hud-xp-text">0 / 50</span></div>
+    <div class="hud-xp-bar-bg"><div class="hud-xp-bar" id="hud-xp-bar" style="width:0%"></div></div>
+  </div>
+  <div class="hud-buildings" id="hud-buildings">建物: 0 / 17</div>
+</div>
+
+<!-- World Clears Panel -->
+<div id="world-clears" class="hidden">
+  <div class="wc-row">⛏️さんすう <span id="wc-math">0</span>回</div>
+  <div class="wc-row">📖こくご <span id="wc-ja">0</span>回</div>
+  <div class="wc-row">🗣️えいご <span id="wc-en">0</span>回</div>
+</div>
+
+<!-- Interact Hint -->
+<div id="interact-hint" class="hidden">近くに場所があります</div>
+
+<!-- Building Popup -->
+<div id="building-popup" class="hidden">
+  <div class="bp-name" id="bp-name"></div>
+  <div id="bp-desc"></div>
+  <div class="bp-lock" id="bp-lock"></div>
+</div>
+
+<!-- Mobile Controls -->
+<div id="mobile-controls" class="hidden">
+  <div id="joystick-wrap">
+    <div id="joystick-base">
+      <div id="joystick-stick"></div>
+    </div>
+  </div>
+  <button id="btn-interact" class="hidden">E</button>
+</div>
+
+<!-- Quiz Overlay -->
+<div id="quiz-overlay" class="hidden">
+  <div id="quiz-modal">
+    <div class="quiz-header">
+      <span class="quiz-subject-icon" id="quiz-icon">⛏️</span>
+      <span class="quiz-subject-name" id="quiz-subject-name">さんすうの どうくつ</span>
+      <span class="quiz-progress" id="quiz-progress">1 / 5</span>
+    </div>
+    <div class="quiz-question" id="quiz-question"></div>
+    <div class="quiz-options" id="quiz-options"></div>
+    <div class="quiz-feedback hidden" id="quiz-feedback"></div>
+    <button class="quiz-next-btn hidden" id="quiz-next-btn">つぎへ ▶</button>
+  </div>
+</div>
+
+<!-- Quiz Result -->
+<div id="quiz-result" class="hidden">
+  <div class="result-box">
+    <div class="result-emoji" id="result-emoji">🎉</div>
+    <div class="result-title" id="result-title">クリア！</div>
+    <div class="result-score" id="result-score">5問中 5問 正解！</div>
+    <div class="result-xp" id="result-xp">+25 XP</div>
+    <div class="result-unlock" id="result-unlock"></div>
+    <button class="btn-result-close" id="btn-result-close">もどる</button>
+  </div>
+</div>
+
+<!-- Level Up Banner -->
+<div id="levelup-banner" class="hidden">
+  <div class="levelup-title">⭐ レベルアップ！</div>
+  <div class="levelup-lv" id="levelup-lv">Lv.2</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
+<script src="quiz-data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
