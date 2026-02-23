@@ -64,6 +64,7 @@ class Game {
     this.quiz = null;
     this.gameRunning = false;
     this.frame = 0;
+    this.vx = 0; this.vz = 0; // velocity for smooth movement
     this.isMobile = 'ontouchstart' in window || window.innerWidth < 900;
   }
 
@@ -355,9 +356,13 @@ class Game {
 
     // Quiz buttons
     document.getElementById('quiz-next-btn').addEventListener('click', () => this.quizNext());
+    document.getElementById('quiz-quit-btn').addEventListener('click', () => this.quitQuiz());
     document.getElementById('btn-result-close').addEventListener('click', () => {
       document.getElementById('quiz-result').classList.add('hidden');
     });
+
+    // Home button
+    document.getElementById('btn-home').addEventListener('click', () => this.goHome());
   }
 
   // ===== GAME LOOP =====
@@ -375,7 +380,7 @@ class Game {
   movePlayer() {
     const quizOpen = !document.getElementById('quiz-overlay').classList.contains('hidden') ||
                      !document.getElementById('quiz-result').classList.contains('hidden');
-    if (quizOpen) return;
+    if (quizOpen) { this.vx *= 0.7; this.vz *= 0.7; return; }
 
     let dx = 0, dz = 0;
     if (this.keys['w'] || this.keys['ArrowUp'])    dz -= 1;
@@ -385,24 +390,40 @@ class Game {
     if (this.joystick.active) { dx += this.joystick.x; dz += this.joystick.y; }
 
     const len = Math.hypot(dx, dz);
+    const ACCEL = 0.026;
+    const FRICTION = 0.76;
+    const MAX_SPD = 0.19;
+
     if (len > 0.01) {
-      const speed = 0.13;
       dx /= len; dz /= len;
-      // Camera-relative direction
       const ca = this.cameraAngle;
       const wx = dx*Math.cos(ca) - dz*Math.sin(ca);
       const wz = dx*Math.sin(ca) + dz*Math.cos(ca);
 
-      this.player.position.x = Math.max(-48, Math.min(48, this.player.position.x + wx*speed));
-      this.player.position.z = Math.max(-48, Math.min(48, this.player.position.z + wz*speed));
-      this.player.rotation.y = Math.atan2(wx, wz);
+      this.vx += wx * ACCEL;
+      this.vz += wz * ACCEL;
+      const spd = Math.hypot(this.vx, this.vz);
+      if (spd > MAX_SPD) { this.vx = this.vx/spd*MAX_SPD; this.vz = this.vz/spd*MAX_SPD; }
 
-      const sw = Math.sin(this.frame*0.28) * 0.45;
+      // Face direction of velocity
+      if (spd > 0.01) this.player.rotation.y = Math.atan2(this.vx, this.vz);
+    } else {
+      this.vx *= FRICTION;
+      this.vz *= FRICTION;
+      if (Math.hypot(this.vx, this.vz) < 0.002) { this.vx = 0; this.vz = 0; }
+    }
+
+    this.player.position.x = Math.max(-48, Math.min(48, this.player.position.x + this.vx));
+    this.player.position.z = Math.max(-48, Math.min(48, this.player.position.z + this.vz));
+
+    const spd2 = Math.hypot(this.vx, this.vz);
+    if (spd2 > 0.01) {
+      const sw = Math.sin(this.frame * 0.32) * Math.min(spd2 / MAX_SPD, 1) * 0.5;
       this._lL.rotation.x =  sw; this._rL.rotation.x = -sw;
       this._lA.rotation.x = -sw*0.6; this._rA.rotation.x =  sw*0.6;
     } else {
-      this._lL.rotation.x = 0; this._rL.rotation.x = 0;
-      this._lA.rotation.x = 0; this._rA.rotation.x = 0;
+      this._lL.rotation.x *= 0.8; this._rL.rotation.x *= 0.8;
+      this._lA.rotation.x *= 0.8; this._rA.rotation.x *= 0.8;
     }
   }
 
@@ -417,7 +438,7 @@ class Game {
     const ty = py + Math.tan(this.cameraPitch)*cd;
     const tz = pz + Math.cos(ca)*cd;
 
-    this.camera.position.lerp(new THREE.Vector3(tx,ty,tz), 0.09);
+    this.camera.position.lerp(new THREE.Vector3(tx,ty,tz), 0.12);
     this.camera.lookAt(px, py, pz);
   }
 
@@ -554,6 +575,27 @@ class Game {
     }
   }
 
+  quitQuiz() {
+    document.getElementById('quiz-overlay').classList.add('hidden');
+    this.quiz = null;
+    this.vx = 0; this.vz = 0;
+  }
+
+  goHome() {
+    // Close any open modals
+    document.getElementById('quiz-overlay').classList.add('hidden');
+    document.getElementById('quiz-result').classList.add('hidden');
+    this.quiz = null;
+    this.vx = 0; this.vz = 0;
+    this.gameRunning = false;
+    document.getElementById('hud').classList.add('hidden');
+    document.getElementById('world-clears').classList.add('hidden');
+    document.getElementById('mobile-controls').classList.add('hidden');
+    document.getElementById('interact-hint').classList.add('hidden');
+    document.getElementById('building-popup').classList.add('hidden');
+    document.getElementById('title-screen').classList.remove('hidden');
+  }
+
   finishQuiz() {
     document.getElementById('quiz-overlay').classList.add('hidden');
     const { quiz } = this;
@@ -605,6 +647,7 @@ class Game {
     document.getElementById('world-clears').classList.remove('hidden');
     if (this.isMobile) document.getElementById('mobile-controls').classList.remove('hidden');
     this.gameRunning = true;
+    this.vx = 0; this.vz = 0;
     this.updateHUD();
   }
 }
