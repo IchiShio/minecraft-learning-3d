@@ -184,7 +184,7 @@ class Game {
     this.moonMesh = null;
     this.mobSpawnTimer = 0;
     this.dayFrame = 0;
-    this.isMobile = 'ontouchstart' in window || window.innerWidth < 900;
+    this.isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
     // Settings & Audio
     this.settings = null;
     this.audioCtx = null;
@@ -1879,7 +1879,7 @@ class Game {
     document.getElementById('btn-home').classList.remove('hidden');
     document.getElementById('btn-settings').classList.remove('hidden');
     document.getElementById('world-clears').classList.remove('hidden');
-    document.getElementById('mobile-controls').classList.remove('hidden');
+    if (this.isMobile) document.getElementById('mobile-controls').classList.remove('hidden');
     // モブ・昼夜リセット
     this.spawnMobs();
     this.dayTime = 0.3; // 朝からスタート
