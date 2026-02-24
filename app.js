@@ -1377,13 +1377,44 @@ class Game {
 
     const el = document.getElementById('quiz-options');
     el.innerHTML = '';
-    q.opts.forEach((opt, i) => {
-      const btn = document.createElement('button');
-      btn.className = 'quiz-option';
-      btn.textContent = opt;
-      btn.onclick = () => this.answerQuiz(i);
-      el.appendChild(btn);
-    });
+    const qtype = q.type || 'choice';
+
+    if (qtype === 'truefalse') {
+      el.className = 'quiz-options truefalse';
+      ['○', '×'].forEach((label, i) => {
+        const btn = document.createElement('button');
+        btn.className = 'quiz-option quiz-tf-btn ' + (i === 0 ? 'maru' : 'batsu');
+        btn.textContent = label;
+        btn.onclick = () => this.answerQuiz(i);
+        el.appendChild(btn);
+      });
+    } else if (qtype === 'keypad') {
+      el.className = 'quiz-options keypad-wrap';
+      const disp = document.createElement('div');
+      disp.className = 'quiz-keypad-input'; disp.id = 'quiz-keypad-input';
+      disp.textContent = '?';
+      el.appendChild(disp);
+      const pad = document.createElement('div');
+      pad.className = 'quiz-keypad';
+      ['7','8','9','4','5','6','1','2','3','⌫','0','OK'].forEach(k => {
+        const btn = document.createElement('button');
+        btn.className = 'quiz-keypad-btn' + (k==='OK' ? ' confirm' : k==='⌫' ? ' back' : '');
+        btn.textContent = k;
+        btn.onclick = () => this.keypadPress(k);
+        pad.appendChild(btn);
+      });
+      el.appendChild(pad);
+      quiz.keypadValue = '';
+    } else {
+      el.className = 'quiz-options';
+      q.opts.forEach((opt, i) => {
+        const btn = document.createElement('button');
+        btn.className = 'quiz-option';
+        btn.textContent = opt;
+        btn.onclick = () => this.answerQuiz(i);
+        el.appendChild(btn);
+      });
+    }
     quiz.answered = false;
   }
 
@@ -1391,17 +1422,40 @@ class Game {
     const { quiz } = this;
     if (quiz.answered) return;
     quiz.answered = true;
-
     const q = quiz.questions[quiz.cur];
     const ok = idx === q.correct;
-    this.updateQuestionStat(q.id, ok);
-
     document.querySelectorAll('.quiz-option').forEach((btn, i) => {
       btn.disabled = true;
       if (i === q.correct) btn.classList.add('correct');
       else if (i === idx && !ok) btn.classList.add('wrong');
     });
+    this._recordResult(ok, q);
+  }
 
+  keypadPress(key) {
+    const { quiz } = this;
+    if (quiz.answered) return;
+    const disp = document.getElementById('quiz-keypad-input');
+    if (key === '⌫') {
+      quiz.keypadValue = (quiz.keypadValue || '').slice(0, -1);
+    } else if (key === 'OK') {
+      if (!quiz.keypadValue) return;
+      quiz.answered = true;
+      const q = quiz.questions[quiz.cur];
+      const ok = quiz.keypadValue === String(q.answer);
+      document.querySelectorAll('.quiz-keypad-btn').forEach(b => b.disabled = true);
+      if (disp) disp.classList.add(ok ? 'correct' : 'wrong');
+      this._recordResult(ok, q);
+      return;
+    } else {
+      if ((quiz.keypadValue || '').length < 6) quiz.keypadValue += key;
+    }
+    if (disp) disp.textContent = quiz.keypadValue || '?';
+  }
+
+  _recordResult(ok, q) {
+    this.updateQuestionStat(q.id, ok);
+    const { quiz } = this;
     if (ok) {
       quiz.correct++;
       this.state.totalCorrect++;
@@ -1411,12 +1465,11 @@ class Game {
       this.state.currentStreak = 0;
     }
     this.state.totalGames++;
-
+    const correctLabel = (q.type === 'keypad') ? q.answer : q.opts[q.correct];
     const fb = document.getElementById('quiz-feedback');
     fb.className = 'quiz-feedback ' + (ok ? 'correct' : 'wrong');
-    fb.textContent = ok ? `✅ せいかい！ ${q.explain}` : `❌ ちがいます。正解: ${q.opts[q.correct]}。${q.explain}`;
+    fb.textContent = ok ? `✅ せいかい！ ${q.explain}` : `❌ ちがいます。正解: ${correctLabel}。${q.explain}`;
     fb.classList.remove('hidden');
-
     const nxt = document.getElementById('quiz-next-btn');
     nxt.textContent = quiz.cur+1 >= quiz.questions.length ? '結果を見る ▶' : 'つぎへ ▶';
     nxt.classList.remove('hidden');
