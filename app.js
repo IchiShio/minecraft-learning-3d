@@ -294,12 +294,12 @@ class Game {
 
     for (let i = 0; i < 10; i++) {
       if (maxGrade >= 2) {
-        const a=r(10,49), b=r(10,49), ans=a+b;
+        const a=r(1,20), b=r(1,20), ans=a+b;
         const opts=shuf([ans,...wrongs(ans,3)]);
         pool.push({ id:`gen_add2_${i}`, grade:2, subject:'math',
           q:`${a} ＋ ${b} ＝ ？`, opts:opts.map(String), correct:opts.indexOf(ans),
           explain:`${a}＋${b}＝${ans}！` });
-        const c=r(20,79), d=r(10,Math.min(c,40)), ans2=c-d;
+        const c=r(5,25), d=r(1,Math.min(c-1,12)), ans2=c-d;
         const opts2=shuf([ans2,...wrongs(ans2,3)]);
         pool.push({ id:`gen_sub2_${i}`, grade:2, subject:'math',
           q:`${c} ー ${d} ＝ ？`, opts:opts2.map(String), correct:opts2.indexOf(ans2),
