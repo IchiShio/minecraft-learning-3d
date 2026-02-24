@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mclearn3d-v5';
+const CACHE_NAME = 'mclearn3d-v6';
 const STATIC_ASSETS = [
   './',
   './index.html',
@@ -25,6 +25,17 @@ self.addEventListener('activate', event => {
 
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
+  // questions.csv: 常に最新を取得（network first, cache fallback）
+  if (url.pathname.endsWith('/questions.csv')) {
+    event.respondWith(
+      caches.open(CACHE_NAME).then(cache =>
+        fetch(event.request, { cache: 'no-cache' })
+          .then(res => { cache.put(event.request, res.clone()); return res; })
+          .catch(() => cache.match(event.request))
+      )
+    );
+    return;
+  }
   // CDN (Three.js etc): network first, cache fallback
   if (url.hostname !== self.location.hostname) {
     event.respondWith(

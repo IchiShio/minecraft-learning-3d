@@ -4,6 +4,7 @@
 const STORAGE_KEY = 'mclearn3d_v1';
 const STATS_KEY = 'mclearn3d_stats_v1';
 const SETTINGS_KEY = 'mclearn3d_settings_v1';
+const CUSTOM_Q_KEY = 'mclearn3d_custom_q_v1';
 const DEFAULT_SETTINGS = { speed: 1.0, bgmVol: 0.5, seVol: 0.7, difficulty: 'normal' };
 // レベルから現在の学年を返す (Lv1-2=2年生, Lv3-5=3年生, ...)
 const GRADE_FOR_LEVEL = lv => lv <= 2 ? 2 : lv <= 5 ? 3 : lv <= 9 ? 4 : lv <= 14 ? 5 : 6;
@@ -202,12 +203,14 @@ class Game {
     // 当日の回答集計（1日の終わりに自動難易度調整に使う）
     this.todayCorrect = 0;
     this.todayWrong   = 0;
+    // questions.csv から読み込んだデータ（null = まだ未ロード）
+    this.quizData = null;
   }
 
   // ===== STATS & ADAPTIVE =====
   initQuestionIds() {
     ['math','japanese','english'].forEach(subject => {
-      const sd = QUIZ_DATA[subject];
+      const sd = this.quizData[subject];
       Object.entries(sd.grades).forEach(([grade, qs]) => {
         qs.forEach((q, i) => {
           if (!q.id) q.id = `${subject}_g${grade}_${String(i).padStart(3,'0')}`;
@@ -251,6 +254,64 @@ class Game {
       .map(([topic]) => topic);
   }
 
+  // ===== CSV 問題ロード =====
+  async loadCustomQuestions() {
+    let rows = null;
+    try {
+      const res = await fetch('./questions.csv', { cache: 'no-cache' });
+      if (res.ok) {
+        const text = await res.text();
+        rows = this.parseCSV(text);
+        localStorage.setItem(CUSTOM_Q_KEY, JSON.stringify(rows));
+      }
+    } catch(e) {}
+    if (!rows) {
+      try {
+        const cached = localStorage.getItem(CUSTOM_Q_KEY);
+        if (cached) rows = JSON.parse(cached);
+      } catch(e) {}
+    }
+    this.quizData = (rows && rows.length > 0) ? this.buildQuizData(rows) : QUIZ_DATA;
+  }
+
+  parseCSV(text) {
+    const lines = text.split('\n')
+      .map(l => l.trim())
+      .filter(l => l && !l.startsWith('#'));
+    if (lines.length < 2) return [];
+    const headers = lines[0].split(',').map(h => h.trim());
+    return lines.slice(1).map(line => {
+      const vals = line.split(',').map(v => v.trim());
+      const obj = {};
+      headers.forEach((h, i) => { obj[h] = vals[i] !== undefined ? vals[i] : ''; });
+      return obj;
+    }).filter(r => r.subject && r.question && r.opt1 && r.opt2);
+  }
+
+  buildQuizData(rows) {
+    const data = {
+      math:     { grades: {} },
+      japanese: { grades: {} },
+      english:  { grades: {} },
+    };
+    rows.forEach((r, idx) => {
+      const subj = r.subject;
+      if (!data[subj]) return;
+      const grade = r.grade || '2';
+      if (!data[subj].grades[grade]) data[subj].grades[grade] = [];
+      const opts = [r.opt1, r.opt2, r.opt3, r.opt4].filter(Boolean);
+      data[subj].grades[grade].push({
+        id: `${subj}_${grade}_csv${idx}`,
+        q: r.question,
+        opts,
+        correct: parseInt(r.correct) || 0,
+        explain: r.explain || '',
+        diff: r.diff || 'normal',
+      });
+    });
+    return data;
+  }
+
   // 1日の終わりに呼ばれる。正解率から adaptiveBias を更新する
   onNewDay() {
     const total = this.todayCorrect + this.todayWrong;
@@ -291,7 +352,7 @@ class Game {
   }
 
   selectAdaptiveQuestions(subject, count) {
-    const sd = QUIZ_DATA[subject];
+    const sd = this.quizData[subject];
     const maxGrade = GRADE_FOR_LEVEL(this.state.level);
     const reviewPool = [], normalPool = [], previewPool = [];
     const shuf = arr => [...arr].sort(() => Math.random()-0.5);
@@ -1687,7 +1748,7 @@ class Game {
   }
 
   getSubjectStars(subject) {
-    const grades = QUIZ_DATA[subject].grades;
+    const grades = this.quizData[subject].grades;
     let seen = 0, correct = 0;
     Object.values(grades).forEach(qs => {
       qs.forEach(q => {
@@ -2102,13 +2163,17 @@ addEventListener('load', () => {
   txt.textContent = 'Three.js 読み込み中...';
   bar.style.width = '20%';
 
-  setTimeout(() => {
-    bar.style.width = '50%';
-    txt.textContent = 'ワールドを生成中...';
+  setTimeout(async () => {
+    bar.style.width = '40%';
+    txt.textContent = '問題を読み込み中...';
 
     game = new Game();
     game.settings = game.loadSettings();
     game.state = game.loadState();
+    await game.loadCustomQuestions();
+
+    bar.style.width = '70%';
+    txt.textContent = 'ワールドを生成中...';
     game.init();
 
     setTimeout(() => {
