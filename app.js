@@ -197,6 +197,7 @@ class Game {
     this.insideBuilding = false;
     this.interiorGroup = null;
     this.prevPlayerPos = null;
+    this.lookState = { up: false, down: false };
   }
 
   // ===== STATS & ADAPTIVE =====
@@ -1455,6 +1456,20 @@ class Game {
       btn.addEventListener('mouseleave', releaseMouse);
     });
 
+    // Look up/down buttons (camera pitch)
+    ['look-up', 'look-down'].forEach(id => {
+      const dir = id === 'look-up' ? 'up' : 'down';
+      const btn = document.getElementById(id);
+      if (!btn) return;
+      btn.addEventListener('touchstart', e => { e.preventDefault(); this.lookState[dir] = true; }, { passive: false });
+      const release = e => { if (e) e.preventDefault(); this.lookState[dir] = false; };
+      btn.addEventListener('touchend',    release, { passive: false });
+      btn.addEventListener('touchcancel', release);
+      btn.addEventListener('mousedown',  () => { this.lookState[dir] = true; });
+      btn.addEventListener('mouseup',    () => { this.lookState[dir] = false; });
+      btn.addEventListener('mouseleave', () => { this.lookState[dir] = false; });
+    });
+
     // Interact btn
     const btnI = document.getElementById('btn-interact');
     btnI.addEventListener('click', () => this.tryInteract());
@@ -1589,6 +1604,9 @@ class Game {
   }
 
   followCamera() {
+    if (this.lookState.up)   this.cameraPitch = Math.max(-0.15, this.cameraPitch - 0.018);
+    if (this.lookState.down) this.cameraPitch = Math.min(0.80,  this.cameraPitch + 0.018);
+
     const px = this.player.position.x;
     const py = this.player.position.y + 1.3;
     const pz = this.player.position.z;

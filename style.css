@@ -379,12 +379,29 @@ html, body {
 #mobile-controls.hidden { display: none; }
 
 /* D-pad */
+#dpad-area {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  pointer-events: all;
+}
 #dpad {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 3px;
-  pointer-events: all;
+}
+#look-pad {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.look-btn {
+  width: 48px !important;
+  height: 48px !important;
+  font-size: 0.85rem !important;
+  background: rgba(0,100,200,0.45) !important;
+  border-color: rgba(100,180,255,0.7) !important;
 }
 .dpad-row {
   display: flex;
