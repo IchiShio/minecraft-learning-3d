@@ -215,6 +215,10 @@ html, body {
 #world-clears.hidden { display: none; }
 .wc-row { color: #fff; font-size: 0.75rem; }
 .wc-row span { color: #7dff4f; font-weight: 900; }
+.wc-stars { font-size: 0.6rem; letter-spacing: 0px; margin-left: 4px; }
+.wc-stars.weak   { color: #ff7777; }
+.wc-stars.normal { color: #aaaaaa; }
+.wc-stars.strong { color: #ffd700; }
 
 /* ===== INTERACT HINT ===== */
 #interact-hint {

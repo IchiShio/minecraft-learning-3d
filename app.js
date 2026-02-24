@@ -6,7 +6,7 @@ const STATS_KEY = 'mclearn3d_stats_v1';
 // レベルから現在の学年を返す (Lv1-2=2年生, Lv3-5=3年生, ...)
 const GRADE_FOR_LEVEL = lv => lv <= 2 ? 2 : lv <= 5 ? 3 : lv <= 9 ? 4 : lv <= 14 ? 5 : 6;
 const QUIZ_PER_SESSION = 5;
-const XP_PER_CORRECT = 10;
+const XP_PER_CORRECT = 12;
 const XP_FOR_LEVEL = lv => 50 + (lv - 1) * 30;
 
 const DEFAULT_STATE = {
@@ -28,13 +28,13 @@ const BUILDING_DEFS = [
   { id:'forge',   name:'鍛冶屋',        icon:'🔨', pos:[12,0,-10],  size:[3.5,4,3],   color:0x5A3E28, roofColor:0x3a2010, cond:s=>s.worldClears.math>=3,     condText:'さんすう 3回クリア', desc:'つよい どうぐを つくる！' },
   { id:'shrine',  name:'神社',          icon:'⛩️', pos:[-12,0,-10], size:[3.5,5,3],   color:0xCC2200, roofColor:0x881500, cond:s=>s.worldClears.japanese>=3, condText:'こくご 3回クリア', desc:'かみさまの パワー！' },
   { id:'guild',   name:'冒険ギルド',    icon:'🏰', pos:[-12,0,0],   size:[4.5,4.5,4], color:0x48485A, roofColor:0x282838, cond:s=>s.worldClears.english>=3,  condText:'えいご 3回クリア', desc:'ぼうけんしゃ 募集！' },
-  { id:'garden',  name:'花畑',          icon:'🌸', pos:[0,0,-10],   size:[5,1,4],     color:0x4a8a30, roofColor:0x2a5a18, cond:s=>(s.perfectClears||0)>=1,   condText:'パーフェクト 1回',       desc:'きれいな はな！' },
+  { id:'garden',  name:'花畑',          icon:'🌸', pos:[0,0,-10],   size:[5,1,4],     color:0x4a8a30, roofColor:0x2a5a18, cond:s=>wc(s)>=5,                  condText:'ごうけい 5回クリア',     desc:'きれいな はな！' },
   { id:'tower',   name:'見張り塔',      icon:'🗼', pos:[18,0,0],    size:[2.5,8,2.5], color:0x686868, roofColor:0x383838, cond:s=>s.worldClears.math>=5,     condText:'さんすう 5回クリア', desc:'とおくまで みえる！' },
   { id:'library', name:'図書館',        icon:'📚', pos:[-18,0,0],   size:[4.5,4,3.5], color:0x8060A0, roofColor:0x503080, cond:s=>wc(s)>=12,        condText:'ごうけい 12回クリア',    desc:'ちしきの くら！' },
   { id:'port',    name:'港',            icon:'⚓', pos:[0,0,-20],   size:[5,3.5,4],   color:0x2060A0, roofColor:0x103070, cond:s=>s.worldClears.english>=5,  condText:'えいご 5回クリア', desc:'うみの むこうへ！' },
   { id:'castle',  name:'城',            icon:'🏯', pos:[0,0,22],    size:[6,7,5],     color:0xC89820, roofColor:0x806000, cond:s=>wc(s)>=20,        condText:'ごうけい 20回クリア',    desc:'りっぱな おしろ！' },
   { id:'dragon',  name:'ドラゴンの すみか',icon:'🐉',pos:[24,0,-16], size:[5.5,6,5],   color:0x4B2080, roofColor:0x2A0050, cond:s=>wc(s)>=30,        condText:'ごうけい 30回クリア',    desc:'でんせつの せいいき！' },
-  { id:'sky',     name:'そらの しろ',   icon:'☁️', pos:[-24,0,-16], size:[5,5.5,4.5], color:0x6890C0, roofColor:0x3060A0, cond:s=>(s.perfectClears||0)>=5,   condText:'パーフェクト 5回',       desc:'くうちゅうに うかぶ しろ！' },
+  { id:'sky',     name:'そらの しろ',   icon:'☁️', pos:[-24,0,-16], size:[5,5.5,4.5], color:0x6890C0, roofColor:0x3060A0, cond:s=>s.worldClears.japanese+s.worldClears.english>=10, condText:'こくご+えいご 10回クリア', desc:'くうちゅうに うかぶ しろ！' },
   { id:'rainbow', name:'にじの ゲート', icon:'🌈', pos:[0,0,30],    size:[6,8,2],     color:0xFF66BB, roofColor:0xCC3399, cond:s=>s.level>=15,       condText:'レベル 15 たっせい',     desc:'でんせつの もん！' },
 ];
 
@@ -358,6 +358,7 @@ class Game {
     this.buildPlayer(this.currentChar);
     this.buildBuildings();
     this.buildPortals();
+    this.buildWeaknessMarkers();
     this.spawnMobs();
     this.setupControls();
     this.loop();
@@ -1301,8 +1302,55 @@ class Game {
   }
 
   glowPortals() {
-    const v = 0.3 + 0.25*Math.sin(Date.now()*0.002);
+    const t = Date.now() * 0.002;
+    const v = 0.3 + 0.25 * Math.sin(t);
     this.portalGlows.forEach(g => { g.material.opacity = v; });
+    if (this.weaknessMeshes) {
+      Object.values(this.weaknessMeshes).forEach(mesh => {
+        if (mesh.visible) {
+          mesh.position.y = 6.5 + Math.sin(t * 1.5) * 0.3;
+          mesh.rotation.y += 0.03;
+        }
+      });
+    }
+  }
+
+  getSubjectStars(subject) {
+    const grades = QUIZ_DATA[subject].grades;
+    let seen = 0, correct = 0;
+    Object.values(grades).forEach(qs => {
+      qs.forEach(q => {
+        const stat = this.playerStats[q.id];
+        if (stat && stat.seen > 0) { seen += stat.seen; correct += stat.correct; }
+      });
+    });
+    if (seen < 3) return -1;
+    const rate = correct / seen;
+    if (rate >= 0.85) return 5;
+    if (rate >= 0.70) return 4;
+    if (rate >= 0.55) return 3;
+    if (rate >= 0.40) return 2;
+    return 1;
+  }
+
+  buildWeaknessMarkers() {
+    this.weaknessMeshes = {};
+    PORTAL_DEFS.forEach(pd => {
+      const mat = new THREE.MeshBasicMaterial({ color: 0xFF3333 });
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, 0.7), mat);
+      mesh.position.set(pd.pos[0], 6.5, pd.pos[2]);
+      mesh.visible = false;
+      this.scene.add(mesh);
+      this.weaknessMeshes[pd.subject] = mesh;
+    });
+  }
+
+  updateWeaknessMarkers() {
+    if (!this.weaknessMeshes) return;
+    Object.entries(this.weaknessMeshes).forEach(([subject, mesh]) => {
+      const stars = this.getSubjectStars(subject);
+      mesh.visible = stars >= 0 && stars <= 2;
+    });
   }
 
   checkNearby() {
@@ -1551,6 +1599,15 @@ class Game {
     document.getElementById('wc-en').textContent = s.worldClears.english;
     const hudDay = document.getElementById('hud-day');
     if (hudDay) hudDay.textContent = `☀️ ${this.dayCount}日目`;
+    [['math','wc-math-stars'], ['japanese','wc-ja-stars'], ['english','wc-en-stars']].forEach(([subj, id]) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const stars = this.getSubjectStars(subj);
+      if (stars < 0) { el.textContent = ''; el.className = 'wc-stars'; return; }
+      el.textContent = '★'.repeat(stars) + '☆'.repeat(5 - stars);
+      el.className = 'wc-stars ' + (stars <= 2 ? 'weak' : stars >= 4 ? 'strong' : 'normal');
+    });
+    this.updateWeaknessMarkers();
   }
 
   // ===== START GAME =====
