@@ -63,24 +63,27 @@ const CHARACTER_DEFS = [
 const CHAR_STORAGE_KEY = 'mclearn3d_char';
 
 // ===== MOB DEFINITIONS =====
+// burnDay: 日光で燃える(ゾンビ/スケルトン) chargeRange: 爆発距離(クリーパー)
 const MOB_TYPES = {
-  zombie:   { hostile:true,  speed:0.022, chaseR:12, fleeR:0,  skin:'#4A9A4A', shirt:'#2A6A2A', pants:'#1A4A1A', shoes:'#0A2A0A', flying:false },
-  creeper:  { hostile:true,  speed:0.020, chaseR:10, fleeR:0,  skin:'#55AA55', shirt:'#3A8A3A', pants:'#2A6A2A', shoes:'#1A5A1A', flying:false },
-  skeleton: { hostile:true,  speed:0.025, chaseR:14, fleeR:0,  skin:'#D8D8D8', shirt:'#C0C0C0', pants:'#B0B0B0', shoes:'#A0A0A0', flying:false },
-  pig:      { hostile:false, speed:0.015, chaseR:0,  fleeR:5,  skin:'#F0B0A0', shirt:'#E89888', pants:'#E89888', shoes:'#D07060', flying:false },
-  sheep:    { hostile:false, speed:0.015, chaseR:0,  fleeR:5,  skin:'#D8D8C0', shirt:'#DDDDC8', pants:'#D0D0B8', shoes:'#B0B0A0', flying:false },
-  chicken:  { hostile:false, speed:0.012, chaseR:0,  fleeR:4,  skin:'#FFFFFF', shirt:'#EEEEEE', pants:'#FFB040', shoes:'#FF8800', flying:false },
-  ghast:    { hostile:true,  speed:0.013, chaseR:20, fleeR:0,  skin:'#F0F0F0', shirt:'#F8F8F8', pants:'#E8E8E8', shoes:'#D8D8D8', flying:true  },
+  zombie:   { hostile:true,  speed:0.022, chaseR:14, fleeR:0,  skin:'#4A9A4A', shirt:'#2A6A2A', pants:'#1A4A1A', shoes:'#0A2A0A', flying:false, burnDay:true,  chargeRange:0   },
+  creeper:  { hostile:true,  speed:0.020, chaseR:10, fleeR:0,  skin:'#55AA55', shirt:'#3A8A3A', pants:'#2A6A2A', shoes:'#1A5A1A', flying:false, burnDay:false, chargeRange:3.2 },
+  skeleton: { hostile:true,  speed:0.025, chaseR:14, fleeR:0,  skin:'#D8D8D8', shirt:'#C0C0C0', pants:'#B0B0B0', shoes:'#A0A0A0', flying:false, burnDay:true,  chargeRange:0   },
+  pig:      { hostile:false, speed:0.015, chaseR:0,  fleeR:5,  skin:'#F0B0A0', shirt:'#E89888', pants:'#E89888', shoes:'#D07060', flying:false, burnDay:false, chargeRange:0   },
+  sheep:    { hostile:false, speed:0.015, chaseR:0,  fleeR:5,  skin:'#D8D8C0', shirt:'#DDDDC8', pants:'#D0D0B8', shoes:'#B0B0A0', flying:false, burnDay:false, chargeRange:0   },
+  chicken:  { hostile:false, speed:0.012, chaseR:0,  fleeR:4,  skin:'#FFFFFF', shirt:'#EEEEEE', pants:'#FFB040', shoes:'#FF8800', flying:false, burnDay:false, chargeRange:0   },
+  ghast:    { hostile:true,  speed:0.013, chaseR:20, fleeR:0,  skin:'#F0F0F0', shirt:'#F8F8F8', pants:'#E8E8E8', shoes:'#D8D8D8', flying:true,  burnDay:false, chargeRange:0   },
 };
 
-const MOB_SPAWN_LIST = [
-  {type:'zombie',   x:15,   z:10 }, {type:'zombie',   x:-15, z:10 }, {type:'zombie',   x:18, z:-5  },
-  {type:'creeper',  x:10,   z:18 }, {type:'creeper',  x:-20, z:-8 },
-  {type:'skeleton', x:-10,  z:-18}, {type:'skeleton', x:20,  z:15 },
-  {type:'pig',      x:5,    z:12 }, {type:'pig',      x:-5,  z:15 }, {type:'pig',      x:10, z:-9  },
-  {type:'sheep',    x:-8,   z:12 }, {type:'sheep',    x:7,   z:-12}, {type:'sheep',    x:-12,z:6   },
-  {type:'chicken',  x:3,    z:14 }, {type:'chicken',  x:-3,  z:-14}, {type:'chicken',  x:15, z:-12 },
-  {type:'ghast',    x:8,    z:16 }, {type:'ghast',    x:-16, z:8  },
+// ゲーム1日の長さ(フレーム)、モブ上限
+const DAY_LENGTH      = 2400; // ≈40秒/日 (60fps)
+const MOB_CAP_HOSTILE = 12;
+const MOB_CAP_PASSIVE = 10;
+
+// 初期配置(昼間 受動モブのみ)
+const INITIAL_MOBS = [
+  {type:'pig',     x:6,   z:12}, {type:'pig',    x:-8, z:13}, {type:'pig',   x:11, z:-8},
+  {type:'sheep',   x:-9,  z:11}, {type:'sheep',  x:7,  z:-11},
+  {type:'chicken', x:4,   z:14}, {type:'chicken', x:-5, z:-13},
 ];
 
 function hexDarken(hex, f) {
@@ -115,6 +118,14 @@ class Game {
     this.vx = 0; this.vz = 0; // velocity for smooth movement
     this.mobs = [];
     this.fireballs = [];
+    // 昼夜サイクル (0=深夜, 0.25=日の出, 0.5=正午, 0.75=日没)
+    this.dayTime = 0.30;
+    this.dayCount = 1;
+    this.ambientLight = null;
+    this.sunLight = null;
+    this.sunMesh = null;
+    this.moonMesh = null;
+    this.mobSpawnTimer = 0;
     this.isMobile = 'ontouchstart' in window || window.innerWidth < 900;
   }
 
@@ -184,14 +195,16 @@ class Game {
     });
 
     // Lights
-    this.scene.add(new THREE.AmbientLight(0xffffff, 0.65));
-    const sun = new THREE.DirectionalLight(0xfff8e0, 0.9);
-    sun.position.set(40, 70, 30);
-    sun.castShadow = true;
-    sun.shadow.mapSize.set(1024, 1024);
-    Object.assign(sun.shadow.camera, { left:-70, right:70, top:70, bottom:-70, far:200 });
-    this.scene.add(sun);
+    this.ambientLight = new THREE.AmbientLight(0xffffff, 0.65);
+    this.scene.add(this.ambientLight);
+    this.sunLight = new THREE.DirectionalLight(0xfff8e0, 0.9);
+    this.sunLight.position.set(40, 70, 30);
+    this.sunLight.castShadow = true;
+    this.sunLight.shadow.mapSize.set(1024, 1024);
+    Object.assign(this.sunLight.shadow.camera, { left:-70, right:70, top:70, bottom:-70, far:200 });
+    this.scene.add(this.sunLight);
 
+    this.buildDayNightVisuals();
     this.buildWorld();
     const savedCharId = localStorage.getItem(CHAR_STORAGE_KEY) || 'steve';
     this.currentChar = CHARACTER_DEFS.find(c=>c.id===savedCharId) || CHARACTER_DEFS[0];
@@ -664,9 +677,11 @@ class Game {
   }
 
   spawnMobs() {
+    this.mobs.forEach(m => this.scene.remove(m));
+    this.fireballs.forEach(f => this.scene.remove(f));
     this.mobs = [];
     this.fireballs = [];
-    MOB_SPAWN_LIST.forEach(sp => {
+    INITIAL_MOBS.forEach(sp => {
       const m = this.buildMobMesh(sp.type, sp.x, sp.z);
       this.scene.add(m);
       this.mobs.push(m);
@@ -675,14 +690,40 @@ class Game {
 
   updateMobs() {
     const px = this.player.position.x, pz = this.player.position.z;
+    const night = this.isNightTime();
+    const toRemove = [];
 
     this.mobs.forEach(mob => {
       const ud = mob.userData, def = ud.def;
+      const dist = Math.hypot(px - mob.position.x, pz - mob.position.z);
 
+      // ===== デスポーン (距離 > 50 で即、> 35 でランダム) =====
+      if (dist > 50 || (dist > 35 && def.hostile && Math.random() < 0.003)) {
+        toRemove.push(mob); return;
+      }
+
+      // ===== 昼間燃焼 (ゾンビ・スケルトン) =====
+      if (def.burnDay && !night) {
+        ud.burnTimer = (ud.burnTimer || 0) + 1;
+        // 3秒後(180f)から地面に沈む
+        if (ud.burnTimer > 180) {
+          mob.position.y -= 0.05;
+          if (mob.position.y < -3) { toRemove.push(mob); return; }
+          return; // 燃焼中は移動しない
+        }
+        // 炎のチカチカ(スケール微振動)
+        const flicker = 1 + 0.04 * Math.sin(ud.burnTimer * 0.8);
+        mob.scale.set(flicker, flicker, flicker);
+        return;
+      } else {
+        ud.burnTimer = 0;
+        if (!def.flying && !ud.burning) mob.position.y = 0;
+      }
+
+      // ===== 浮遊型(ガスト) =====
       if (def.flying) {
         mob.position.y = 9 + Math.sin(Date.now()*0.0009 + mob.position.x*0.3) * 1.8;
         const dx = px - mob.position.x, dz = pz - mob.position.z;
-        const dist = Math.hypot(dx, dz);
         if (dist < def.chaseR && dist > 0.5) {
           mob.position.x += (dx/dist)*def.speed*0.5;
           mob.position.z += (dz/dist)*def.speed*0.5;
@@ -690,14 +731,14 @@ class Game {
           ud.fireCooldown--;
           if (ud.fireCooldown <= 0) {
             this.spawnFireball(mob);
-            ud.fireCooldown = 160+Math.floor(Math.random()*100);
+            ud.fireCooldown = 160 + Math.floor(Math.random()*100);
           }
         } else {
           ud.wanderTimer--;
           if (ud.wanderTimer <= 0) {
             const a = Math.random()*Math.PI*2;
             ud.wanderDx = Math.cos(a); ud.wanderDz = Math.sin(a);
-            ud.wanderTimer = 80+Math.floor(Math.random()*120);
+            ud.wanderTimer = 80 + Math.floor(Math.random()*120);
           }
           mob.position.x = Math.max(-42, Math.min(42, mob.position.x + ud.wanderDx*def.speed*0.4));
           mob.position.z = Math.max(-42, Math.min(42, mob.position.z + ud.wanderDz*def.speed*0.4));
@@ -705,8 +746,27 @@ class Game {
         return;
       }
 
+      // ===== クリーパー チャージ → 爆発 =====
+      if (def.chargeRange > 0) {
+        if (dist < def.chargeRange) {
+          ud.chargeTimer = (ud.chargeTimer || 0) + 1;
+          // チカチカ点滅(スケール)
+          const s = 1 + 0.07 * Math.sin(ud.chargeTimer * 0.45);
+          mob.scale.set(s, s, s);
+          if (ud.chargeTimer >= 90) {  // 1.5秒後に爆発
+            this.triggerExplosion(mob.position.clone());
+            toRemove.push(mob); return;
+          }
+        } else {
+          if ((ud.chargeTimer||0) > 0) {
+            ud.chargeTimer = Math.max(0, ud.chargeTimer - 2);
+            mob.scale.set(1, 1, 1);
+          }
+        }
+      }
+
+      // ===== 通常 AI (追跡/逃走/徘徊) =====
       const dx = px - mob.position.x, dz = pz - mob.position.z;
-      const dist = Math.hypot(dx, dz);
       let mvx = 0, mvz = 0;
 
       if (def.hostile && dist < def.chaseR && dist > 0.5) {
@@ -718,7 +778,7 @@ class Game {
         if (ud.wanderTimer <= 0) {
           if (Math.random() < 0.28) { ud.wanderDx=0; ud.wanderDz=0; }
           else { const a=Math.random()*Math.PI*2; ud.wanderDx=Math.cos(a); ud.wanderDz=Math.sin(a); }
-          ud.wanderTimer = 90+Math.floor(Math.random()*150);
+          ud.wanderTimer = 90 + Math.floor(Math.random()*150);
         }
         mvx = ud.wanderDx*def.speed*0.45; mvz = ud.wanderDz*def.speed*0.45;
       }
@@ -733,7 +793,17 @@ class Game {
       }
     });
 
-    // Fireballs
+    // 削除リスト処理
+    toRemove.forEach(mob => {
+      this.scene.remove(mob);
+      mob.traverse(o => {
+        if (o.geometry) o.geometry.dispose();
+        if (o.material) (Array.isArray(o.material)?o.material:[o.material]).forEach(m=>m.dispose());
+      });
+    });
+    this.mobs = this.mobs.filter(m => !toRemove.includes(m));
+
+    // ===== 火の玉 更新 =====
     this.fireballs = this.fireballs.filter(fb => {
       fb.userData.life--;
       fb.position.x += fb.userData.vx;
@@ -759,6 +829,147 @@ class Game {
     fb.userData = { vx:(dx/dist)*spd, vy:(dy/dist)*spd*0.4, vz:(dz/dist)*spd, life:90 };
     this.scene.add(fb);
     this.fireballs.push(fb);
+  }
+
+  // ===== クリーパー爆発エフェクト =====
+  triggerExplosion(pos) {
+    const mat = new THREE.MeshBasicMaterial({ color:0xFF8800, transparent:true, opacity:0.85 });
+    const boom = new THREE.Mesh(new THREE.BoxGeometry(1,1,1), mat);
+    boom.position.copy(pos); boom.position.y = 1;
+    this.scene.add(boom);
+    let t = 0;
+    const expand = () => {
+      t++;
+      boom.scale.setScalar(1 + t * 0.45);
+      mat.opacity = 0.85 - t * 0.09;
+      if (t < 9) requestAnimationFrame(expand);
+      else { this.scene.remove(boom); mat.dispose(); }
+    };
+    requestAnimationFrame(expand);
+    // プレイヤーが近ければ警告表示
+    const d = Math.hypot(pos.x-this.player.position.x, pos.z-this.player.position.z);
+    if (d < 5) {
+      const hint = document.getElementById('interact-hint');
+      hint.textContent = '💥 クリーパーが爆発した！';
+      hint.classList.remove('hidden');
+      setTimeout(() => hint.classList.add('hidden'), 1800);
+    }
+  }
+
+  // ===== 昼夜サイクル =====
+  buildDayNightVisuals() {
+    // Minecraft風の四角い太陽・月
+    this.sunMesh = new THREE.Mesh(
+      new THREE.BoxGeometry(5,5,0.4),
+      new THREE.MeshBasicMaterial({ color:0xFFFF44 })
+    );
+    this.scene.add(this.sunMesh);
+    this.moonMesh = new THREE.Mesh(
+      new THREE.BoxGeometry(3.5,3.5,0.4),
+      new THREE.MeshBasicMaterial({ color:0xCCCCEE })
+    );
+    this.scene.add(this.moonMesh);
+  }
+
+  updateDayNight() {
+    const prev = this.dayTime;
+    this.dayTime = (this.dayTime + 1/DAY_LENGTH) % 1;
+    // 深夜を越えたら日数カウントアップ
+    if (prev > 0.95 && this.dayTime < 0.05) {
+      this.dayCount++;
+      document.getElementById('hud-day').textContent = this.isNightTime() ? `🌙 ${this.dayCount}日目` : `☀️ ${this.dayCount}日目`;
+    }
+    const t = this.dayTime;
+
+    // 空の色補間 (深夜→夜明け→昼→夕暮れ→深夜)
+    let sky;
+    const lerp = (a, b, f) => a + (b-a)*Math.max(0,Math.min(1,f));
+    const hexToRGB = h => [parseInt(h,16)>>16, (parseInt(h,16)>>8)&0xFF, parseInt(h,16)&0xFF];
+    const lerpHex = (ha, hb, f) => {
+      const [ar,ag,ab] = hexToRGB(ha.replace('#','')), [br,bg,bb] = hexToRGB(hb.replace('#',''));
+      return new THREE.Color(lerp(ar,br,f)/255, lerp(ag,bg,f)/255, lerp(ab,bb,f)/255);
+    };
+    if      (t < 0.20) sky = lerpHex('#030818','#030818', 1);
+    else if (t < 0.28) sky = lerpHex('#030818','#FF8844', (t-0.20)/0.08);
+    else if (t < 0.38) sky = lerpHex('#FF8844','#87CEEB', (t-0.28)/0.10);
+    else if (t < 0.62) sky = lerpHex('#87CEEB','#87CEEB', 1);
+    else if (t < 0.72) sky = lerpHex('#87CEEB','#FF6622', (t-0.62)/0.10);
+    else if (t < 0.80) sky = lerpHex('#FF6622','#030818', (t-0.72)/0.08);
+    else               sky = lerpHex('#030818','#030818', 1);
+
+    this.scene.background = sky;
+    this.scene.fog.color = sky;
+
+    // 太陽・月の軌道 (XY平面で回転, Z=-20)
+    const angle = t * Math.PI * 2;
+    const R = 80, H = 65;
+    this.sunMesh.position.set(Math.sin(angle)*R, Math.cos(angle)*H, -20);
+    this.sunMesh.lookAt(0, 0, 0);
+    this.moonMesh.position.set(-Math.sin(angle)*R, -Math.cos(angle)*H, -20);
+    this.moonMesh.lookAt(0, 0, 0);
+
+    // ライト強度 (昼:明るい / 夜:暗い)
+    const dayFactor = Math.max(0, Math.min(1, Math.sin((t - 0.23) * Math.PI / 0.54)));
+    this.ambientLight.intensity = 0.12 + dayFactor * 0.55;
+    this.sunLight.intensity = dayFactor * 0.9;
+
+    // 夜間警告ラベル更新
+    const hudDay = document.getElementById('hud-day');
+    if (hudDay) hudDay.textContent = this.isNightTime() ? `🌙 ${this.dayCount}日目` : `☀️ ${this.dayCount}日目`;
+  }
+
+  isNightTime() {
+    return this.dayTime < 0.22 || this.dayTime > 0.78;
+  }
+
+  // ===== 動的モブスポーン =====
+  mobSpawnTick() {
+    this.mobSpawnTimer++;
+    if (this.mobSpawnTimer % 100 !== 0) return; // 約1.7秒ごとにチェック
+
+    const hostileCount = this.mobs.filter(m => MOB_TYPES[m.userData.type].hostile).length;
+    const passiveCount = this.mobs.filter(m => !MOB_TYPES[m.userData.type].hostile).length;
+
+    if (this.isNightTime() && hostileCount < MOB_CAP_HOSTILE) {
+      // 夜: 敵対モブをスポーン (ゾンビ40%・スケルトン30%・クリーパー30%)
+      const r = Math.random();
+      const type = r < 0.4 ? 'zombie' : r < 0.7 ? 'skeleton' : 'creeper';
+      const pos = this.randomSpawnPos();
+      if (pos) this.spawnMobAt(type, pos.x, pos.z);
+
+      // レベル3以上でガストが出現
+      if (this.state.level >= 3) {
+        const ghastCount = this.mobs.filter(m => m.userData.type === 'ghast').length;
+        if (ghastCount < 2 && Math.random() < 0.18) {
+          const pos2 = this.randomSpawnPos();
+          if (pos2) this.spawnMobAt('ghast', pos2.x, pos2.z);
+        }
+      }
+    } else if (!this.isNightTime() && passiveCount < MOB_CAP_PASSIVE) {
+      // 昼: 受動モブをスポーン
+      const types = ['pig','pig','sheep','chicken'];
+      const type = types[Math.floor(Math.random()*types.length)];
+      const pos = this.randomSpawnPos();
+      if (pos) this.spawnMobAt(type, pos.x, pos.z);
+    }
+  }
+
+  randomSpawnPos() {
+    const px = this.player.position.x, pz = this.player.position.z;
+    for (let i = 0; i < 8; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const d = 12 + Math.random() * 22;
+      const x = Math.max(-44, Math.min(44, px + Math.cos(a)*d));
+      const z = Math.max(-44, Math.min(44, pz + Math.sin(a)*d));
+      return { x, z };
+    }
+    return null;
+  }
+
+  spawnMobAt(type, x, z) {
+    const m = this.buildMobMesh(type, x, z);
+    this.scene.add(m);
+    this.mobs.push(m);
   }
 
   // ===== CONTROLS =====
@@ -870,7 +1081,9 @@ class Game {
     this.movePlayer();
     this.followCamera();
     this.glowPortals();
+    this.updateDayNight();
     this.updateMobs();
+    this.mobSpawnTick();
     this.checkNearby();
     this.renderer.render(this.scene, this.camera);
   }
@@ -1137,6 +1350,8 @@ class Game {
     document.getElementById('wc-math').textContent = s.worldClears.math;
     document.getElementById('wc-ja').textContent = s.worldClears.japanese;
     document.getElementById('wc-en').textContent = s.worldClears.english;
+    const hudDay = document.getElementById('hud-day');
+    if (hudDay) hudDay.textContent = `☀️ ${this.dayCount}日目`;
   }
 
   // ===== START GAME =====
@@ -1146,6 +1361,11 @@ class Game {
     document.getElementById('btn-home').classList.remove('hidden');
     document.getElementById('world-clears').classList.remove('hidden');
     if (this.isMobile) document.getElementById('mobile-controls').classList.remove('hidden');
+    // モブ・昼夜リセット
+    this.spawnMobs();
+    this.dayTime = 0.30; // 朝からスタート
+    this.dayCount = 1;
+    this.mobSpawnTimer = 0;
     this.gameRunning = true;
     this.vx = 0; this.vz = 0;
     this.updateHUD();
