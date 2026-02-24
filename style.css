@@ -335,6 +335,11 @@ html, body {
   50% { transform: translateX(-50%) translateY(-6px); }
 }
 
+/* PCではDパッドを非表示（マウスありデバイス） */
+@media (hover: hover) and (pointer: fine) {
+  #mobile-controls { display: none !important; }
+}
+
 /* ===== CONTROLS (mobile) ===== */
 #mobile-controls {
   position: fixed;
