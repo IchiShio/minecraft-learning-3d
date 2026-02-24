@@ -106,9 +106,10 @@ const NOTE_FREQ = (() => {
   return function(n) {
     if (n === 'R') return 0;
     const m = n.match(/^([A-G])(#|b)?(\d)$/);
-    if (!m) return 440;
+    if (!m) return 261.63;
+    // C4 = 261.63 Hz を基準とする
     const semi = (parseInt(m[3]) - 4) * 12 + base[m[1]] + (m[2]==='#'?1:m[2]==='b'?-1:0);
-    return 440 * Math.pow(2, semi / 12);
+    return 261.63 * Math.pow(2, semi / 12);
   };
 })();
 
@@ -393,7 +394,11 @@ class Game {
 
   // ===== AUDIO =====
   initAudio() {
-    if (this.audioCtx) return;
+    if (this.audioCtx) {
+      // すでに作成済みの場合は resume だけ呼ぶ
+      if (this.audioCtx.state === 'suspended') this.audioCtx.resume();
+      return;
+    }
     try {
       this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       this.bgmGain = this.audioCtx.createGain();
@@ -402,10 +407,13 @@ class Game {
       this.seGain = this.audioCtx.createGain();
       this.seGain.gain.value = this.settings.seVol;
       this.seGain.connect(this.audioCtx.destination);
+      // ブラウザのAutoplay Policy対応: ユーザー操作後でも suspended のことがある
+      this.audioCtx.resume();
     } catch(e) { this.audioCtx = null; }
   }
 
   playBgm(name) {
+    if (!this.audioCtx) return;
     if (this.currentBgm === name) return;
     this.stopBgm();
     this.currentBgm = name;
@@ -418,40 +426,55 @@ class Game {
   }
 
   _scheduleBgm(name) {
-    if (this.currentBgm !== name || !this.audioCtx || this.settings.bgmVol === 0) return;
-    const def = BGM_DEFS[name];
-    const beatSec = 60 / def.bpm;
+    if (this.currentBgm !== name || !this.audioCtx || this.settings.bgmVol < 0.01) return;
     const ac = this.audioCtx;
-    let t = ac.currentTime + 0.05;
-    let totalSec = 0;
 
-    def.notes.forEach(([n, dur]) => {
-      const freq = NOTE_FREQ(n);
-      const noteSec = dur * beatSec;
-      if (freq > 0) {
-        const osc = ac.createOscillator();
-        const g   = ac.createGain();
-        osc.type = def.type;
-        osc.frequency.value = freq;
-        const vol = name === 'quiz' ? 0.08 : 0.18;
-        g.gain.setValueAtTime(0.001, t);
-        g.gain.linearRampToValueAtTime(vol, t + 0.03);
-        g.gain.setValueAtTime(vol, t + noteSec - 0.06);
-        g.gain.linearRampToValueAtTime(0.001, t + noteSec);
-        osc.connect(g);
-        g.connect(this.bgmGain);
-        osc.start(t);
-        osc.stop(t + noteSec);
-      }
-      t += noteSec;
-      totalSec += noteSec;
-    });
+    const doSchedule = () => {
+      if (this.currentBgm !== name) return;
+      const def = BGM_DEFS[name];
+      const beatSec = 60 / def.bpm;
+      let t = ac.currentTime + 0.15;
+      let totalSec = 0;
 
-    this._bgmTimeout = setTimeout(() => this._scheduleBgm(name), (totalSec - 0.15) * 1000);
+      def.notes.forEach(([n, dur]) => {
+        const freq = NOTE_FREQ(n);
+        const noteSec = dur * beatSec;
+        if (freq > 0) {
+          const osc = ac.createOscillator();
+          const g   = ac.createGain();
+          osc.type = def.type;
+          osc.frequency.value = freq;
+          const vol = name === 'quiz' ? 0.15 : 0.35;
+          const fadeIn  = Math.min(0.04, noteSec * 0.15);
+          const fadeOut = Math.min(0.08, noteSec * 0.25);
+          g.gain.setValueAtTime(0.001, t);
+          g.gain.linearRampToValueAtTime(vol, t + fadeIn);
+          g.gain.setValueAtTime(vol, Math.max(t + fadeIn, t + noteSec - fadeOut));
+          g.gain.linearRampToValueAtTime(0.001, t + noteSec);
+          osc.connect(g);
+          g.connect(this.bgmGain);
+          osc.start(t);
+          osc.stop(t + noteSec);
+        }
+        t += noteSec;
+        totalSec += noteSec;
+      });
+
+      this._bgmTimeout = setTimeout(() => this._scheduleBgm(name), (totalSec - 0.2) * 1000);
+    };
+
+    // AudioContext が suspended のまま音符をスケジュールするとタイミングがずれるため
+    // resume を確実に待ってからスケジュールする
+    if (ac.state === 'suspended') {
+      ac.resume().then(doSchedule).catch(() => {});
+    } else {
+      doSchedule();
+    }
   }
 
   playSe(name) {
-    if (!this.audioCtx || this.settings.seVol === 0) return;
+    if (!this.audioCtx || this.settings.seVol < 0.01) return;
+    if (this.audioCtx.state === 'suspended') this.audioCtx.resume();
     const ac = this.audioCtx;
     const vol = this.settings.seVol;
 
@@ -1916,9 +1939,8 @@ addEventListener('load', () => {
           document.getElementById('settings-bgm-val').textContent = e.target.value + '%';
           if (game.bgmGain) game.bgmGain.gain.value = v;
           // 0になったらBGM停止、再開
-          if (v === 0) game.stopBgm();
+          if (v < 0.01) game.stopBgm();
           else if (!game.currentBgm && game.gameRunning) {
-            game.currentBgm = null;
             game.playBgm(game.isNightTime() ? 'night' : 'field');
           }
         });
