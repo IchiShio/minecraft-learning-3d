@@ -16,39 +16,62 @@ const DEFAULT_STATE = {
   level: 1, xp: 0,
   totalCorrect: 0, totalGames: 0,
   perfectClears: 0, maxStreak: 0, currentStreak: 0,
-  worldClears: { math: 0, japanese: 0, english: 0 },
+  inventory: { wood:0, stone:0, iron:0, gold:0, diamond:0 },
   achievements: [],
   adaptiveBias: 0,   // -2〜+2: 自動難易度オフセット（毎日更新）
 };
 
+const inv = s => s.inventory || {};
+const totalItems = s => Object.values(inv(s)).reduce((a,b)=>a+b,0);
+
 // ===== BUILDING DEFINITIONS =====
 const BUILDING_DEFS = [
-  { id:'cabin',   name:'小屋',          icon:'🏠', pos:[6,0,6],     size:[3,3,3],     color:0x8B5E3C, roofColor:0x5c3a1e, cond:s=>wc(s)>=1,         condText:'いずれか 1回クリア',      desc:'ぼうけんのはじまり！' },
-  { id:'tanbo',   name:'田んぼ',        icon:'🌾', pos:[-6,0,6],    size:[5,1.5,3],   color:0x2a8a20, roofColor:0x1a5a10, cond:s=>s.worldClears.japanese>=1, condText:'こくご 1回クリア', desc:'おこめが そだつ！' },
-  { id:'mine',    name:'採掘場',        icon:'⛏️', pos:[8,0,-6],    size:[3.5,3.5,3], color:0x686868, roofColor:0x484848, cond:s=>s.worldClears.math>=1,     condText:'さんすう 1回クリア', desc:'ブロックを ほる！' },
-  { id:'market',  name:'交易所',        icon:'🏪', pos:[-8,0,-6],   size:[4,3.5,3],   color:0xC4521C, roofColor:0x7a2e00, cond:s=>s.worldClears.english>=1,  condText:'えいご 1回クリア', desc:'せかいと つながる！' },
-  { id:'well',    name:'井戸',          icon:'⛲', pos:[0,0,10],    size:[2.5,2.5,2.5],color:0x888888,roofColor:0x505050, cond:s=>wc(s)>=4,         condText:'ごうけい 4回クリア',     desc:'きれいな水が でる！' },
-  { id:'onsen',   name:'温泉',          icon:'♨️', pos:[12,0,0],    size:[4,3,4],     color:0x5080a0, roofColor:0x305070, cond:s=>wc(s)>=6,         condText:'ごうけい 6回クリア',     desc:'ゆっくり くつろぐ！' },
-  { id:'forge',   name:'鍛冶屋',        icon:'🔨', pos:[12,0,-10],  size:[3.5,4,3],   color:0x5A3E28, roofColor:0x3a2010, cond:s=>s.worldClears.math>=3,     condText:'さんすう 3回クリア', desc:'つよい どうぐを つくる！' },
-  { id:'shrine',  name:'神社',          icon:'⛩️', pos:[-12,0,-10], size:[3.5,5,3],   color:0xCC2200, roofColor:0x881500, cond:s=>s.worldClears.japanese>=3, condText:'こくご 3回クリア', desc:'かみさまの パワー！' },
-  { id:'guild',   name:'冒険ギルド',    icon:'🏰', pos:[-12,0,0],   size:[4.5,4.5,4], color:0x48485A, roofColor:0x282838, cond:s=>s.worldClears.english>=3,  condText:'えいご 3回クリア', desc:'ぼうけんしゃ 募集！' },
-  { id:'garden',  name:'花畑',          icon:'🌸', pos:[0,0,-10],   size:[5,1,4],     color:0x4a8a30, roofColor:0x2a5a18, cond:s=>wc(s)>=5,                  condText:'ごうけい 5回クリア',     desc:'きれいな はな！' },
-  { id:'tower',   name:'見張り塔',      icon:'🗼', pos:[18,0,0],    size:[2.5,8,2.5], color:0x686868, roofColor:0x383838, cond:s=>s.worldClears.math>=5,     condText:'さんすう 5回クリア', desc:'とおくまで みえる！' },
-  { id:'library', name:'図書館',        icon:'📚', pos:[-18,0,0],   size:[4.5,4,3.5], color:0x8060A0, roofColor:0x503080, cond:s=>wc(s)>=12,        condText:'ごうけい 12回クリア',    desc:'ちしきの くら！' },
-  { id:'port',    name:'港',            icon:'⚓', pos:[0,0,-20],   size:[5,3.5,4],   color:0x2060A0, roofColor:0x103070, cond:s=>s.worldClears.english>=5,  condText:'えいご 5回クリア', desc:'うみの むこうへ！' },
-  { id:'castle',  name:'城',            icon:'🏯', pos:[0,0,22],    size:[6,7,5],     color:0xC89820, roofColor:0x806000, cond:s=>wc(s)>=20,        condText:'ごうけい 20回クリア',    desc:'りっぱな おしろ！' },
-  { id:'dragon',  name:'ドラゴンの すみか',icon:'🐉',pos:[24,0,-16], size:[5.5,6,5],   color:0x4B2080, roofColor:0x2A0050, cond:s=>wc(s)>=30,        condText:'ごうけい 30回クリア',    desc:'でんせつの せいいき！' },
-  { id:'sky',     name:'そらの しろ',   icon:'☁️', pos:[-24,0,-16], size:[5,5.5,4.5], color:0x6890C0, roofColor:0x3060A0, cond:s=>s.worldClears.japanese+s.worldClears.english>=10, condText:'こくご+えいご 10回クリア', desc:'くうちゅうに うかぶ しろ！' },
-  { id:'rainbow', name:'にじの ゲート', icon:'🌈', pos:[0,0,30],    size:[6,8,2],     color:0xFF66BB, roofColor:0xCC3399, cond:s=>s.level>=15,       condText:'レベル 15 たっせい',     desc:'でんせつの もん！' },
+  { id:'cabin',   name:'小屋',          icon:'🏠', pos:[6,0,6],     size:[3,3,3],     color:0x8B5E3C, roofColor:0x5c3a1e, cond:s=>inv(s).wood>=3,                              condText:'🪵 木材 3こ',                  desc:'ぼうけんのはじまり！' },
+  { id:'tanbo',   name:'田んぼ',        icon:'🌾', pos:[-6,0,6],    size:[5,1.5,3],   color:0x2a8a20, roofColor:0x1a5a10, cond:s=>inv(s).stone>=3,                             condText:'🪨 石 3こ',                    desc:'おこめが そだつ！' },
+  { id:'mine',    name:'採掘場',        icon:'⛏️', pos:[8,0,-6],    size:[3.5,3.5,3], color:0x686868, roofColor:0x484848, cond:s=>inv(s).wood>=6,                              condText:'🪵 木材 6こ',                  desc:'ブロックを ほる！' },
+  { id:'market',  name:'交易所',        icon:'🏪', pos:[-8,0,-6],   size:[4,3.5,3],   color:0xC4521C, roofColor:0x7a2e00, cond:s=>inv(s).iron>=3,                              condText:'⚙️ 鉄 3こ',                   desc:'せかいと つながる！' },
+  { id:'well',    name:'井戸',          icon:'⛲', pos:[0,0,10],    size:[2.5,2.5,2.5],color:0x888888,roofColor:0x505050, cond:s=>totalItems(s)>=12,                           condText:'アイテム ごうけい 12こ',       desc:'きれいな水が でる！' },
+  { id:'onsen',   name:'温泉',          icon:'♨️', pos:[12,0,0],    size:[4,3,4],     color:0x5080a0, roofColor:0x305070, cond:s=>totalItems(s)>=20,                           condText:'アイテム ごうけい 20こ',       desc:'ゆっくり くつろぐ！' },
+  { id:'forge',   name:'鍛冶屋',        icon:'🔨', pos:[12,0,-10],  size:[3.5,4,3],   color:0x5A3E28, roofColor:0x3a2010, cond:s=>inv(s).gold>=3,                              condText:'✨ 金 3こ',                    desc:'つよい どうぐを つくる！' },
+  { id:'shrine',  name:'神社',          icon:'⛩️', pos:[-12,0,-10], size:[3.5,5,3],   color:0xCC2200, roofColor:0x881500, cond:s=>inv(s).stone>=8,                             condText:'🪨 石 8こ',                    desc:'かみさまの パワー！' },
+  { id:'guild',   name:'冒険ギルド',    icon:'🏰', pos:[-12,0,0],   size:[4.5,4.5,4], color:0x48485A, roofColor:0x282838, cond:s=>inv(s).iron>=6,                              condText:'⚙️ 鉄 6こ',                   desc:'ぼうけんしゃ 募集！' },
+  { id:'garden',  name:'花畑',          icon:'🌸', pos:[0,0,-10],   size:[5,1,4],     color:0x4a8a30, roofColor:0x2a5a18, cond:s=>totalItems(s)>=25,                           condText:'アイテム ごうけい 25こ',       desc:'きれいな はな！' },
+  { id:'tower',   name:'見張り塔',      icon:'🗼', pos:[18,0,0],    size:[2.5,8,2.5], color:0x686868, roofColor:0x383838, cond:s=>inv(s).gold>=6,                              condText:'✨ 金 6こ',                    desc:'とおくまで みえる！' },
+  { id:'library', name:'図書館',        icon:'📚', pos:[-18,0,0],   size:[4.5,4,3.5], color:0x8060A0, roofColor:0x503080, cond:s=>totalItems(s)>=45,                           condText:'アイテム ごうけい 45こ',       desc:'ちしきの くら！' },
+  { id:'port',    name:'港',            icon:'⚓', pos:[0,0,-20],   size:[5,3.5,4],   color:0x2060A0, roofColor:0x103070, cond:s=>inv(s).iron>=10,                             condText:'⚙️ 鉄 10こ',                  desc:'うみの むこうへ！' },
+  { id:'castle',  name:'城',            icon:'🏯', pos:[0,0,22],    size:[6,7,5],     color:0xC89820, roofColor:0x806000, cond:s=>totalItems(s)>=60,                           condText:'アイテム ごうけい 60こ',       desc:'りっぱな おしろ！' },
+  { id:'dragon',  name:'ドラゴンの すみか',icon:'🐉',pos:[24,0,-16], size:[5.5,6,5],   color:0x4B2080, roofColor:0x2A0050, cond:s=>totalItems(s)>=80,                           condText:'アイテム ごうけい 80こ',       desc:'でんせつの せいいき！' },
+  { id:'sky',     name:'そらの しろ',   icon:'☁️', pos:[-24,0,-16], size:[5,5.5,4.5], color:0x6890C0, roofColor:0x3060A0, cond:s=>inv(s).stone>=15&&inv(s).iron>=10,           condText:'🪨 石 15こ ＋ ⚙️ 鉄 10こ',  desc:'くうちゅうに うかぶ しろ！' },
+  { id:'rainbow', name:'にじの ゲート', icon:'🌈', pos:[0,0,30],    size:[6,8,2],     color:0xFF66BB, roofColor:0xCC3399, cond:s=>s.level>=15,                                 condText:'レベル 15 たっせい',           desc:'でんせつの もん！' },
 ];
 
-function wc(s) { return s.worldClears.math + s.worldClears.japanese + s.worldClears.english; }
-
-// ===== QUIZ PORTALS =====
-const PORTAL_DEFS = [
-  { id:'math',     subject:'math',     name:'さんすうの どうくつ', icon:'⛏️', pos:[-24,0,0],  color:0xFF6600 },
-  { id:'japanese', subject:'japanese', name:'こくごの もり',       icon:'📖', pos:[24,0,0],   color:0x00CC44 },
-  { id:'english',  subject:'english',  name:'えいごの むら',       icon:'🗣️', pos:[0,0,-24],  color:0x4488FF },
+// Resource types: id, display name, icon, box color, subject, difficulty
+const RESOURCE_DEFS = {
+  wood:    { id:'wood',    name:'木材',   icon:'🪵', color:0x8B5E3C, subject:'math',     diff:'easy'   },
+  stone:   { id:'stone',   name:'石',     icon:'🪨', color:0x888888, subject:'japanese', diff:'easy'   },
+  iron:    { id:'iron',    name:'鉄',     icon:'⚙️', color:0xC88830, subject:'english',  diff:'normal' },
+  gold:    { id:'gold',    name:'金',     icon:'✨', color:0xFFD700, subject:'math',     diff:'normal' },
+  diamond: { id:'diamond', name:'ダイヤ', icon:'💎', color:0x44BBFF, subject:'english',  diff:'hard'   },
+};
+// Resource block spawn positions [x, z] — scattered across the map
+const RESOURCE_SPAWN = [
+  {type:'wood',    pos:[ 2, 0,  2]}, {type:'wood',    pos:[-2, 0,  3]},
+  {type:'wood',    pos:[ 5, 0, -2]}, {type:'wood',    pos:[-5, 0, -2]},
+  {type:'wood',    pos:[ 3, 0,  7]}, {type:'wood',    pos:[-3, 0,  7]},
+  {type:'wood',    pos:[ 7, 0,  3]}, {type:'wood',    pos:[-7, 0,  3]},
+  {type:'stone',   pos:[11, 0,  8]}, {type:'stone',   pos:[-11,0,  8]},
+  {type:'stone',   pos:[ 4, 0, 14]}, {type:'stone',   pos:[-4, 0, 14]},
+  {type:'stone',   pos:[14, 0, -4]}, {type:'stone',   pos:[-14,0, -4]},
+  {type:'stone',   pos:[11, 0, -8]}, {type:'stone',   pos:[-11,0, -8]},
+  {type:'iron',    pos:[17, 0,  8]}, {type:'iron',    pos:[-17,0,  8]},
+  {type:'iron',    pos:[ 8, 0,-14]}, {type:'iron',    pos:[-8, 0,-14]},
+  {type:'iron',    pos:[15, 0, 12]}, {type:'iron',    pos:[-15,0, 12]},
+  {type:'gold',    pos:[21, 0,  4]}, {type:'gold',    pos:[-21,0,  4]},
+  {type:'gold',    pos:[ 0, 0, 18]}, {type:'gold',    pos:[16, 0,-14]},
+  {type:'gold',    pos:[-16,0,-14]},
+  {type:'diamond', pos:[23, 0, -8]}, {type:'diamond', pos:[-23,0, -8]},
+  {type:'diamond', pos:[11, 0, 26]}, {type:'diamond', pos:[-11,0, 26]},
+  {type:'diamond', pos:[23, 0, 10]},
 ];
 
 // ===== CHARACTER DEFINITIONS =====
@@ -165,12 +188,12 @@ class Game {
     this.cameraPitch = 0.45;
     this.cameraDist = 11;
     this.buildingGroups = {};
-    this.portalGlows = [];
+    this.resourceNodes = [];
     this.keys = {};
     this.joystick = { active: false, x: 0, y: 0 };
-    this.nearPortal = null;
+    this.nearResource = null;
     this.nearBuilding = null;
-    this.quiz = null;
+    this.mining = null;
     this.gameRunning = false;
     this.frame = 0;
     this.vx = 0; this.vz = 0; // velocity for smooth movement
@@ -464,11 +487,11 @@ class Game {
         return {
           ...DEFAULT_STATE,
           ...saved,
-          worldClears: { ...DEFAULT_STATE.worldClears, ...(saved.worldClears || {}) },
+          inventory: { ...DEFAULT_STATE.inventory, ...(saved.inventory || {}) },
         };
       }
     } catch(e) {}
-    return { ...DEFAULT_STATE, worldClears: { math:0, japanese:0, english:0 } };
+    return { ...DEFAULT_STATE, inventory: { wood:0, stone:0, iron:0, gold:0, diamond:0 } };
   }
 
   saveState() {
@@ -476,7 +499,7 @@ class Game {
   }
 
   resetState() {
-    this.state = { ...DEFAULT_STATE, worldClears: { math:0, japanese:0, english:0 } };
+    this.state = { ...DEFAULT_STATE, inventory: { wood:0, stone:0, iron:0, gold:0, diamond:0 } };
     this.saveState();
   }
 
@@ -713,8 +736,7 @@ class Game {
     this.currentChar = CHARACTER_DEFS.find(c=>c.id===savedCharId) || CHARACTER_DEFS[0];
     this.buildPlayer(this.currentChar);
     this.buildBuildings();
-    this.buildPortals();
-    this.buildWeaknessMarkers();
+    this.buildResourceNodes();
     this.spawnMobs();
     this.setupControls();
     this.loop();
@@ -1025,26 +1047,17 @@ class Game {
 
   unlockedCount() { return BUILDING_DEFS.filter(d=>d.cond(this.state)).length; }
 
-  // ===== PORTALS =====
-  buildPortals() {
-    PORTAL_DEFS.forEach(def => {
-      const g = new THREE.Group();
+  // ===== RESOURCE NODES =====
+  buildResourceNodes() {
+    this.resourceNodes = [];
+    RESOURCE_SPAWN.forEach((spawn, idx) => {
+      const def = RESOURCE_DEFS[spawn.type];
       const mat = new THREE.MeshLambertMaterial({ color: def.color });
-
-      const lP = new THREE.Mesh(new THREE.BoxGeometry(0.4,4,0.4), mat); lP.position.set(-1.2,2,0); lP.castShadow=true; g.add(lP);
-      const rP = new THREE.Mesh(new THREE.BoxGeometry(0.4,4,0.4), mat); rP.position.set( 1.2,2,0); rP.castShadow=true; g.add(rP);
-      const top = new THREE.Mesh(new THREE.BoxGeometry(3.2,0.5,0.4), mat); top.position.set(0,4.25,0); g.add(top);
-
-      const glowMat = new THREE.MeshBasicMaterial({ color: def.color, transparent:true, opacity:0.5, side: THREE.DoubleSide });
-      const glow = new THREE.Mesh(new THREE.PlaneGeometry(2,3.4), glowMat);
-      glow.position.set(0,2,0); g.add(glow);
-      this.portalGlows.push(glow);
-
-      const base = new THREE.Mesh(new THREE.BoxGeometry(3.5,0.3,3), new THREE.MeshLambertMaterial({ color:0x555555 }));
-      base.position.set(0,0.15,0); base.receiveShadow=true; g.add(base);
-
-      g.position.set(def.pos[0], 0, def.pos[2]);
-      this.scene.add(g);
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), mat);
+      mesh.position.set(spawn.pos[0], 0.5, spawn.pos[2]);
+      mesh.castShadow = true;
+      this.scene.add(mesh);
+      this.resourceNodes.push({ def, mesh, depleted: false, respawnAt: 0, idx });
     });
   }
 
@@ -1587,13 +1600,6 @@ class Game {
     btnI.addEventListener('click', () => this.tryInteract());
     btnI.addEventListener('touchend', e => { e.preventDefault(); this.tryInteract(); });
 
-    // Quiz buttons
-    document.getElementById('quiz-next-btn').addEventListener('click', () => this.quizNext());
-    document.getElementById('quiz-quit-btn').addEventListener('click', () => this.quitQuiz());
-    document.getElementById('btn-result-close').addEventListener('click', () => {
-      document.getElementById('quiz-result').classList.add('hidden');
-    });
-
     // Home button
     document.getElementById('btn-home').addEventListener('click', () => this.goHome());
 
@@ -1651,18 +1657,24 @@ class Game {
     this.frame++;
     this.movePlayer();
     this.followCamera();
-    this.glowPortals();
     this.updateDayNight();
     this.updateMobs();
     this.mobSpawnTick();
     this.checkNearby();
+    // Respawn depleted resource nodes
+    const now = Date.now();
+    this.resourceNodes.forEach(node => {
+      if (node.depleted && now >= node.respawnAt) {
+        node.depleted = false;
+        node.mesh.material.color.setHex(node.def.color);
+      }
+    });
     this.renderer.render(this.scene, this.camera);
   }
 
   movePlayer() {
-    const quizOpen = !document.getElementById('quiz-overlay').classList.contains('hidden') ||
-                     !document.getElementById('quiz-result').classList.contains('hidden');
-    if (quizOpen) { this.vx *= 0.7; this.vz *= 0.7; return; }
+    const miningOpen = !document.getElementById('mining-popup').classList.contains('hidden');
+    if (miningOpen) { this.vx *= 0.7; this.vz *= 0.7; return; }
 
     let dx = 0, dz = 0;
     if (this.keys['w'] || this.keys['ArrowUp'])    dz -= 1;
@@ -1733,83 +1745,35 @@ class Game {
     this.camera.lookAt(px, py, pz);
   }
 
-  glowPortals() {
-    const t = Date.now() * 0.002;
-    const v = 0.3 + 0.25 * Math.sin(t);
-    this.portalGlows.forEach(g => { g.material.opacity = v; });
-    if (this.weaknessMeshes) {
-      Object.values(this.weaknessMeshes).forEach(mesh => {
-        if (mesh.visible) {
-          mesh.position.y = 6.5 + Math.sin(t * 1.5) * 0.3;
-          mesh.rotation.y += 0.03;
-        }
-      });
-    }
-  }
-
-  getSubjectStars(subject) {
-    const grades = this.quizData[subject].grades;
-    let seen = 0, correct = 0;
-    Object.values(grades).forEach(qs => {
-      qs.forEach(q => {
-        const stat = this.playerStats[q.id];
-        if (stat && stat.seen > 0) { seen += stat.seen; correct += stat.correct; }
-      });
-    });
-    if (seen < 3) return -1;
-    const rate = correct / seen;
-    if (rate >= 0.85) return 5;
-    if (rate >= 0.70) return 4;
-    if (rate >= 0.55) return 3;
-    if (rate >= 0.40) return 2;
-    return 1;
-  }
-
-  buildWeaknessMarkers() {
-    this.weaknessMeshes = {};
-    PORTAL_DEFS.forEach(pd => {
-      const mat = new THREE.MeshBasicMaterial({ color: 0xFF3333 });
-      const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, 0.7), mat);
-      mesh.position.set(pd.pos[0], 6.5, pd.pos[2]);
-      mesh.visible = false;
-      this.scene.add(mesh);
-      this.weaknessMeshes[pd.subject] = mesh;
-    });
-  }
-
-  updateWeaknessMarkers() {
-    if (!this.weaknessMeshes) return;
-    Object.entries(this.weaknessMeshes).forEach(([subject, mesh]) => {
-      const stars = this.getSubjectStars(subject);
-      mesh.visible = stars >= 0 && stars <= 2;
-    });
-  }
-
   checkNearby() {
+    if (this.insideBuilding) return;
     const px = this.player.position.x, pz = this.player.position.z;
 
-    let np = null, npd = 7;
-    PORTAL_DEFS.forEach(p => {
-      const d = Math.hypot(px-p.pos[0], pz-p.pos[2]);
-      if (d < npd) { npd=d; np=p; }
+    // Find nearest resource node
+    let nr = null, nrd = 3.5;
+    this.resourceNodes.forEach(node => {
+      if (node.depleted) return;
+      const d = Math.hypot(px - node.mesh.position.x, pz - node.mesh.position.z);
+      if (d < nrd) { nrd = d; nr = node; }
     });
 
+    // Find nearest building
     let nb = null, nbd = 5;
     BUILDING_DEFS.forEach(b => {
-      const d = Math.hypot(px-b.pos[0], pz-b.pos[2]);
-      if (d < nbd) { nbd=d; nb=b; }
+      const d = Math.hypot(px - b.pos[0], pz - b.pos[2]);
+      if (d < nbd) { nbd = d; nb = b; }
     });
 
-    if (np && np !== this.nearPortal) this.playSe('portal');
-    this.nearPortal = np;
+    if (nr && nr !== this.nearResource) this.playSe('portal');
+    this.nearResource = nr;
     this.nearBuilding = nb;
 
     const hint = document.getElementById('interact-hint');
     const btnI = document.getElementById('btn-interact');
     const popup = document.getElementById('building-popup');
 
-    if (np) {
-      hint.textContent = `${np.icon} ${np.name}：E / タップ でチャレンジ！`;
+    if (nr) {
+      hint.textContent = `${nr.def.icon} ${nr.def.name}をほる：E / タップ！`;
       hint.classList.remove('hidden');
       btnI.classList.remove('hidden');
       popup.classList.add('hidden');
@@ -1837,10 +1801,8 @@ class Game {
   // ===== INTERACT =====
   tryInteract() {
     if (this.insideBuilding) { this.exitBuilding(); return; }
-    if (this.nearPortal && !this.quiz &&
-        document.getElementById('quiz-overlay').classList.contains('hidden') &&
-        document.getElementById('quiz-result').classList.contains('hidden')) {
-      this.startQuiz(this.nearPortal);
+    if (this.nearResource && !this.mining) {
+      this.startMining(this.nearResource);
     } else if (this.nearBuilding && this.nearBuilding.cond(this.state)) {
       this.enterBuilding(this.nearBuilding);
     }
@@ -1910,198 +1872,144 @@ class Game {
     document.getElementById('btn-exit-building').classList.add('hidden');
   }
 
-  // ===== QUIZ =====
-  startQuiz(portal) {
-    const qs = this.selectAdaptiveQuestions(portal.subject, QUIZ_PER_SESSION);
-
-    this.quiz = { portal, questions:qs, cur:0, correct:0, answered:false };
-    document.getElementById('quiz-icon').textContent = portal.icon;
-    document.getElementById('quiz-subject-name').textContent = portal.name;
-    document.getElementById('quiz-overlay').classList.remove('hidden');
+  // ===== RESOURCE MINING =====
+  startMining(node) {
+    const def = node.def;
+    // Pick 1 question for this resource type/difficulty
+    const allQ = this.selectAdaptiveQuestions(def.subject, 1);
+    if (!allQ.length) return;
+    const q = allQ[0];
+    this.mining = { node, q };
     this.playBgm('quiz');
-    this.renderQuestion();
+
+    document.getElementById('mining-item-icon').textContent = def.icon;
+    document.getElementById('mining-item-name').textContent = `${def.name}をGetしよう！`;
+    document.getElementById('mining-question').textContent = q.q;
+
+    const optsEl = document.getElementById('mining-options');
+    optsEl.innerHTML = '';
+    q.opts.forEach((opt, i) => {
+      const btn = document.createElement('button');
+      btn.className = 'mining-option';
+      btn.textContent = opt;
+      btn.onclick = () => this.answerMining(i);
+      optsEl.appendChild(btn);
+    });
+
+    document.getElementById('mining-feedback').classList.add('hidden');
+    document.getElementById('mining-popup').classList.remove('hidden');
   }
 
-  renderQuestion() {
-    const { quiz } = this;
-    const q = quiz.questions[quiz.cur];
-    document.getElementById('quiz-progress').textContent = `${quiz.cur+1} / ${quiz.questions.length}`;
-    document.getElementById('quiz-question').textContent = q.q;
-    document.getElementById('quiz-feedback').classList.add('hidden');
-    document.getElementById('quiz-next-btn').classList.add('hidden');
-
-    const el = document.getElementById('quiz-options');
-    el.innerHTML = '';
-    const qtype = q.type || 'choice';
-
-    if (qtype === 'truefalse') {
-      el.className = 'quiz-options truefalse';
-      ['○', '×'].forEach((label, i) => {
-        const btn = document.createElement('button');
-        btn.className = 'quiz-option quiz-tf-btn ' + (i === 0 ? 'maru' : 'batsu');
-        btn.textContent = label;
-        btn.onclick = () => this.answerQuiz(i);
-        el.appendChild(btn);
-      });
-    } else if (qtype === 'keypad') {
-      el.className = 'quiz-options keypad-wrap';
-      const disp = document.createElement('div');
-      disp.className = 'quiz-keypad-input'; disp.id = 'quiz-keypad-input';
-      disp.textContent = '?';
-      el.appendChild(disp);
-      const pad = document.createElement('div');
-      pad.className = 'quiz-keypad';
-      ['7','8','9','4','5','6','1','2','3','⌫','0','OK'].forEach(k => {
-        const btn = document.createElement('button');
-        btn.className = 'quiz-keypad-btn' + (k==='OK' ? ' confirm' : k==='⌫' ? ' back' : '');
-        btn.textContent = k;
-        btn.onclick = () => this.keypadPress(k);
-        pad.appendChild(btn);
-      });
-      el.appendChild(pad);
-      quiz.keypadValue = '';
-    } else {
-      el.className = 'quiz-options';
-      q.opts.forEach((opt, i) => {
-        const btn = document.createElement('button');
-        btn.className = 'quiz-option';
-        btn.textContent = opt;
-        btn.onclick = () => this.answerQuiz(i);
-        el.appendChild(btn);
-      });
-    }
-    quiz.answered = false;
-  }
-
-  answerQuiz(idx) {
-    const { quiz } = this;
-    if (quiz.answered) return;
-    quiz.answered = true;
-    const q = quiz.questions[quiz.cur];
+  answerMining(idx) {
+    const { mining } = this;
+    if (!mining) return;
+    const { node, q } = mining;
     const ok = idx === q.correct;
-    document.querySelectorAll('.quiz-option').forEach((btn, i) => {
+
+    document.querySelectorAll('.mining-option').forEach((btn, i) => {
       btn.disabled = true;
       if (i === q.correct) btn.classList.add('correct');
       else if (i === idx && !ok) btn.classList.add('wrong');
     });
-    this._recordResult(ok, q);
-  }
 
-  keypadPress(key) {
-    const { quiz } = this;
-    if (quiz.answered) return;
-    const disp = document.getElementById('quiz-keypad-input');
-    if (key === '⌫') {
-      quiz.keypadValue = (quiz.keypadValue || '').slice(0, -1);
-    } else if (key === 'OK') {
-      if (!quiz.keypadValue) return;
-      quiz.answered = true;
-      const q = quiz.questions[quiz.cur];
-      const ok = quiz.keypadValue === String(q.answer);
-      document.querySelectorAll('.quiz-keypad-btn').forEach(b => b.disabled = true);
-      if (disp) disp.classList.add(ok ? 'correct' : 'wrong');
-      this._recordResult(ok, q);
-      return;
-    } else {
-      if ((quiz.keypadValue || '').length < 6) quiz.keypadValue += key;
-    }
-    if (disp) disp.textContent = quiz.keypadValue || '?';
-  }
-
-  _recordResult(ok, q) {
     this.updateQuestionStat(q.id, ok);
     this.playSe(ok ? 'correct' : 'wrong');
-    const { quiz } = this;
+
+    const fb = document.getElementById('mining-feedback');
     if (ok) {
-      quiz.correct++;
       this.state.totalCorrect++;
-      this.state.currentStreak = (this.state.currentStreak||0) + 1;
+      this.state.currentStreak = (this.state.currentStreak || 0) + 1;
       if (this.state.currentStreak > this.state.maxStreak) this.state.maxStreak = this.state.currentStreak;
       this.todayCorrect++;
+      this.addXP(XP_PER_CORRECT);
+      fb.textContent = `✅ せいかい！ ${node.def.icon} ${node.def.name} ＋1こ！`;
+      fb.className = 'mining-feedback correct';
     } else {
       this.state.currentStreak = 0;
       this.todayWrong++;
+      const correctLabel = q.opts[q.correct];
+      fb.textContent = `❌ ちがう！ 正解: ${correctLabel}。${q.explain || ''}`;
+      fb.className = 'mining-feedback wrong';
     }
-    this.state.totalGames++;
-    const correctLabel = (q.type === 'keypad') ? q.answer : q.opts[q.correct];
-    const fb = document.getElementById('quiz-feedback');
-    fb.className = 'quiz-feedback ' + (ok ? 'correct' : 'wrong');
-    fb.textContent = ok ? `✅ せいかい！ ${q.explain}` : `❌ ちがいます。正解: ${correctLabel}。${q.explain}`;
     fb.classList.remove('hidden');
-    const nxt = document.getElementById('quiz-next-btn');
-    nxt.textContent = quiz.cur+1 >= quiz.questions.length ? '結果を見る ▶' : 'つぎへ ▶';
-    nxt.classList.remove('hidden');
+    this.state.totalGames++;
+    this.saveState();
+
+    setTimeout(() => {
+      document.getElementById('mining-popup').classList.add('hidden');
+      this.mining = null;
+      this.playBgm(this.isNightTime() ? 'night' : 'field');
+      if (ok) this.collectItem(node);
+    }, ok ? 1500 : 1200);
   }
 
-  quizNext() {
-    const { quiz } = this;
-    quiz.cur++;
-    if (quiz.cur >= quiz.questions.length) {
-      this.finishQuiz();
-    } else {
-      this.renderQuestion();
-    }
+  collectItem(node) {
+    const def = node.def;
+    if (!this.state.inventory) this.state.inventory = { wood:0, stone:0, iron:0, gold:0, diamond:0 };
+    this.state.inventory[def.id] = (this.state.inventory[def.id] || 0) + 1;
+    this.saveState();
+    this.updateInventoryHUD();
+    this.refreshBuildings();
+
+    // Deplete the block
+    node.depleted = true;
+    node.mesh.material.color.setHex(0x333333);
+    node.respawnAt = Date.now() + 60000; // respawn after 60s
+
+    // Floating item animation
+    this.spawnFloatingItem(node.mesh.position.clone(), def.icon);
   }
 
-  quitQuiz() {
-    document.getElementById('quiz-overlay').classList.add('hidden');
-    this.quiz = null;
-    this.vx = 0; this.vz = 0;
-    this.playBgm(this.isNightTime() ? 'night' : 'field');
+  spawnFloatingItem(worldPos, icon) {
+    // Create a DOM overlay item that floats up
+    const el = document.createElement('div');
+    el.textContent = icon;
+    el.style.cssText = 'position:fixed;font-size:2rem;pointer-events:none;z-index:500;transition:all 1.2s ease-out;';
+    document.body.appendChild(el);
+
+    // Project world position to screen
+    const v = worldPos.clone().project(this.camera);
+    const x = (v.x * 0.5 + 0.5) * window.innerWidth;
+    const y = (-v.y * 0.5 + 0.5) * window.innerHeight;
+    el.style.left = x + 'px';
+    el.style.top  = y + 'px';
+    el.style.opacity = '1';
+    el.style.transform = 'translate(-50%, -50%)';
+
+    requestAnimationFrame(() => {
+      el.style.top = (y - 80) + 'px';
+      el.style.opacity = '0';
+    });
+    setTimeout(() => el.remove(), 1300);
+  }
+
+  updateInventoryHUD() {
+    const inv = this.state.inventory || {};
+    ['wood','stone','iron','gold','diamond'].forEach(id => {
+      const el = document.getElementById('inv-' + id);
+      if (el) el.textContent = inv[id] || 0;
+    });
+    // also update buildings count
+    const hb = document.getElementById('hud-buildings');
+    if (hb) hb.textContent = `建物: ${this.unlockedCount()} / ${BUILDING_DEFS.length}`;
   }
 
   goHome() {
     // Close any open modals
-    document.getElementById('quiz-overlay').classList.add('hidden');
-    document.getElementById('quiz-result').classList.add('hidden');
+    document.getElementById('mining-popup').classList.add('hidden');
     document.getElementById('settings-panel').classList.add('hidden');
-    this.quiz = null;
+    this.mining = null;
     this.vx = 0; this.vz = 0;
     this.gameRunning = false;
     this.stopBgm();
     document.getElementById('hud').classList.add('hidden');
+    document.getElementById('hotbar').classList.add('hidden');
     document.getElementById('btn-home').classList.add('hidden');
     document.getElementById('btn-settings').classList.add('hidden');
-    document.getElementById('world-clears').classList.add('hidden');
     document.getElementById('mobile-controls').classList.add('hidden');
     document.getElementById('interact-hint').classList.add('hidden');
     document.getElementById('building-popup').classList.add('hidden');
     document.getElementById('title-screen').classList.remove('hidden');
-  }
-
-  finishQuiz() {
-    document.getElementById('quiz-overlay').classList.add('hidden');
-    const { quiz } = this;
-    const { correct, questions, portal } = quiz;
-    const total = questions.length;
-    const isPerfect = correct === total;
-    const xp = correct * XP_PER_CORRECT;
-
-    // Remember old clears to detect new unlocks
-    const prevState = JSON.parse(JSON.stringify(this.state));
-    this.state.worldClears[portal.subject]++;
-    if (isPerfect) this.state.perfectClears = (this.state.perfectClears||0) + 1;
-
-    const newUnlocks = BUILDING_DEFS.filter(d => !d.cond(prevState) && d.cond(this.state)).map(d => `${d.icon}${d.name}`);
-
-    this.saveState();
-    this.refreshBuildings();
-    this.addXP(xp);
-    this.saveState();
-    this.updateHUD();
-
-    if (newUnlocks.length) this.playSe('unlock');
-    // BGMをフィールドに戻す（昼夜に応じて）
-    this.playBgm(this.isNightTime() ? 'night' : 'field');
-
-    document.getElementById('result-emoji').textContent = isPerfect ? '🌟' : correct >= total*0.6 ? '🎉' : '🍀';
-    document.getElementById('result-title').textContent = isPerfect ? 'パーフェクト！！' : 'クリア！';
-    document.getElementById('result-score').textContent = `${total}問中 ${correct}問 せいかい！`;
-    document.getElementById('result-xp').textContent = `+${xp} XP`;
-    document.getElementById('result-unlock').textContent = newUnlocks.length ? `🏗 ${newUnlocks.join('、')} が かいほう！` : '';
-    document.getElementById('quiz-result').classList.remove('hidden');
-
-    this.quiz = null;
   }
 
   // ===== HUD =====
@@ -2111,30 +2019,18 @@ class Game {
     const need = XP_FOR_LEVEL(s.level);
     document.getElementById('hud-xp-text').textContent = `${s.xp} / ${need}`;
     document.getElementById('hud-xp-bar').style.width = (s.xp / need * 100).toFixed(1) + '%';
-    document.getElementById('hud-buildings').textContent = `建物: ${this.unlockedCount()} / ${BUILDING_DEFS.length}`;
-    document.getElementById('wc-math').textContent = s.worldClears.math;
-    document.getElementById('wc-ja').textContent = s.worldClears.japanese;
-    document.getElementById('wc-en').textContent = s.worldClears.english;
     const hudDay = document.getElementById('hud-day');
-    if (hudDay) hudDay.textContent = `☀️ ${this.dayCount}日目`;
-    [['math','wc-math-stars'], ['japanese','wc-ja-stars'], ['english','wc-en-stars']].forEach(([subj, id]) => {
-      const el = document.getElementById(id);
-      if (!el) return;
-      const stars = this.getSubjectStars(subj);
-      if (stars < 0) { el.textContent = ''; el.className = 'wc-stars'; return; }
-      el.textContent = '★'.repeat(stars) + '☆'.repeat(5 - stars);
-      el.className = 'wc-stars ' + (stars <= 2 ? 'weak' : stars >= 4 ? 'strong' : 'normal');
-    });
-    this.updateWeaknessMarkers();
+    if (hudDay) hudDay.textContent = this.isNightTime() ? `🌙 ${this.dayCount}日目` : `☀️ ${this.dayCount}日目`;
+    this.updateInventoryHUD();
   }
 
   // ===== START GAME =====
   start() {
     document.getElementById('title-screen').classList.add('hidden');
     document.getElementById('hud').classList.remove('hidden');
+    document.getElementById('hotbar').classList.remove('hidden');
     document.getElementById('btn-home').classList.remove('hidden');
     document.getElementById('btn-settings').classList.remove('hidden');
-    document.getElementById('world-clears').classList.remove('hidden');
     if (this.isMobile) document.getElementById('mobile-controls').classList.remove('hidden');
     // モブ・昼夜リセット
     this.spawnMobs();

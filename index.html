@@ -60,13 +60,6 @@
 <button id="btn-exit-building" class="hidden">🚪 でる</button>
 <button class="hud-settings-btn hidden" id="btn-settings">⚙️</button>
 
-<!-- World Clears Panel -->
-<div id="world-clears" class="hidden">
-  <div class="wc-row">⛏️さんすう <span id="wc-math">0</span>回 <span id="wc-math-stars" class="wc-stars"></span></div>
-  <div class="wc-row">📖こくご <span id="wc-ja">0</span>回 <span id="wc-ja-stars" class="wc-stars"></span></div>
-  <div class="wc-row">🗣️えいご <span id="wc-en">0</span>回 <span id="wc-en-stars" class="wc-stars"></span></div>
-</div>
-
 <!-- Interact Hint -->
 <div id="interact-hint" class="hidden">近くに場所があります</div>
 
@@ -75,6 +68,28 @@
   <div class="bp-name" id="bp-name"></div>
   <div id="bp-desc"></div>
   <div class="bp-lock" id="bp-lock"></div>
+</div>
+
+<!-- Inventory Hotbar -->
+<div id="hotbar" class="hidden">
+  <div class="hotbar-slot"><span class="hs-icon">🪵</span><span class="hs-count" id="inv-wood">0</span></div>
+  <div class="hotbar-slot"><span class="hs-icon">🪨</span><span class="hs-count" id="inv-stone">0</span></div>
+  <div class="hotbar-slot"><span class="hs-icon">⚙️</span><span class="hs-count" id="inv-iron">0</span></div>
+  <div class="hotbar-slot"><span class="hs-icon">✨</span><span class="hs-count" id="inv-gold">0</span></div>
+  <div class="hotbar-slot"><span class="hs-icon">💎</span><span class="hs-count" id="inv-diamond">0</span></div>
+</div>
+
+<!-- Mining Popup -->
+<div id="mining-popup" class="hidden">
+  <div id="mining-modal">
+    <div class="mining-header">
+      <span class="mining-item-icon" id="mining-item-icon">🪵</span>
+      <span class="mining-item-name" id="mining-item-name">木材をGetしよう！</span>
+    </div>
+    <div class="mining-question" id="mining-question"></div>
+    <div class="mining-options" id="mining-options"></div>
+    <div class="mining-feedback hidden" id="mining-feedback"></div>
+  </div>
 </div>
 
 <!-- Mobile Controls -->
@@ -126,34 +141,6 @@
       <input type="range" class="settings-slider" id="settings-se" min="0" max="100" step="5" value="70">
     </div>
     <button class="settings-close-btn" id="btn-settings-close">✓ とじる</button>
-  </div>
-</div>
-
-<!-- Quiz Overlay -->
-<div id="quiz-overlay" class="hidden">
-  <div id="quiz-modal">
-    <div class="quiz-header">
-      <span class="quiz-subject-icon" id="quiz-icon">⛏️</span>
-      <span class="quiz-subject-name" id="quiz-subject-name">さんすうの どうくつ</span>
-      <span class="quiz-progress" id="quiz-progress">1 / 5</span>
-      <button class="quiz-quit-btn" id="quiz-quit-btn">✕ やめる</button>
-    </div>
-    <div class="quiz-question" id="quiz-question"></div>
-    <div class="quiz-options" id="quiz-options"></div>
-    <div class="quiz-feedback hidden" id="quiz-feedback"></div>
-    <button class="quiz-next-btn hidden" id="quiz-next-btn">つぎへ ▶</button>
-  </div>
-</div>
-
-<!-- Quiz Result -->
-<div id="quiz-result" class="hidden">
-  <div class="result-box">
-    <div class="result-emoji" id="result-emoji">🎉</div>
-    <div class="result-title" id="result-title">クリア！</div>
-    <div class="result-score" id="result-score">5問中 5問 正解！</div>
-    <div class="result-xp" id="result-xp">+25 XP</div>
-    <div class="result-unlock" id="result-unlock"></div>
-    <button class="btn-result-close" id="btn-result-close">もどる</button>
   </div>
 </div>
 
