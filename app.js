@@ -2,6 +2,9 @@
 
 // ===== CONSTANTS =====
 const STORAGE_KEY = 'mclearn3d_v1';
+const STATS_KEY = 'mclearn3d_stats_v1';
+// レベルから現在の学年を返す (Lv1-2=2年生, Lv3-5=3年生, ...)
+const GRADE_FOR_LEVEL = lv => lv <= 2 ? 2 : lv <= 5 ? 3 : lv <= 9 ? 4 : lv <= 14 ? 5 : 6;
 const QUIZ_PER_SESSION = 5;
 const XP_PER_CORRECT = 10;
 const XP_FOR_LEVEL = lv => 50 + (lv - 1) * 30;
@@ -118,6 +121,7 @@ class Game {
     this.vx = 0; this.vz = 0; // velocity for smooth movement
     this.mobs = [];
     this.fireballs = [];
+    this.playerStats = {};
     // 昼夜サイクル (0=深夜, 0.25=日の出, 0.5=正午, 0.75=日没)
     this.dayTime = 0.30;
     this.dayCount = 1;
@@ -127,6 +131,147 @@ class Game {
     this.moonMesh = null;
     this.mobSpawnTimer = 0;
     this.isMobile = 'ontouchstart' in window || window.innerWidth < 900;
+  }
+
+  // ===== STATS & ADAPTIVE =====
+  initQuestionIds() {
+    ['math','japanese','english'].forEach(subject => {
+      const sd = QUIZ_DATA[subject];
+      Object.entries(sd.grades).forEach(([grade, qs]) => {
+        qs.forEach((q, i) => {
+          if (!q.id) q.id = `${subject}_g${grade}_${String(i).padStart(3,'0')}`;
+          q.grade = parseInt(grade);
+          q.subject = subject;
+        });
+      });
+    });
+  }
+
+  loadStats() {
+    try { return JSON.parse(localStorage.getItem(STATS_KEY)) || {}; } catch(e) { return {}; }
+  }
+
+  saveStats() {
+    try { localStorage.setItem(STATS_KEY, JSON.stringify(this.playerStats)); } catch(e) {}
+  }
+
+  updateQuestionStat(id, isCorrect) {
+    if (!id) return;
+    if (!this.playerStats[id]) this.playerStats[id] = { seen:0, correct:0, wrong:0, streak:0 };
+    const s = this.playerStats[id];
+    s.seen++;
+    if (isCorrect) { s.correct++; s.streak = (s.streak||0)+1; }
+    else { s.wrong++; s.streak = 0; s.lastWrong = Date.now(); }
+    this.saveStats();
+  }
+
+  getWeakTopics() {
+    const topicStats = {};
+    Object.entries(this.playerStats).forEach(([id, stat]) => {
+      const parts = id.split('_');
+      if (parts.length < 3) return;
+      const topic = parts.slice(2).join('_');
+      if (!topicStats[topic]) topicStats[topic] = { correct:0, total:0 };
+      topicStats[topic].correct += stat.correct;
+      topicStats[topic].total += stat.seen;
+    });
+    return Object.entries(topicStats)
+      .filter(([,s]) => s.total >= 3 && s.correct/s.total < 0.65)
+      .map(([topic]) => topic);
+  }
+
+  selectAdaptiveQuestions(subject, count) {
+    const sd = QUIZ_DATA[subject];
+    const maxGrade = GRADE_FOR_LEVEL(this.state.level);
+    const reviewPool = [], normalPool = [], previewPool = [];
+    const shuf = arr => [...arr].sort(() => Math.random()-0.5);
+
+    Object.entries(sd.grades).forEach(([grade, qs]) => {
+      const g = parseInt(grade);
+      if (g > maxGrade + 1) return;
+      qs.forEach(q => {
+        const stat = this.playerStats[q.id] || { seen:0, correct:0, wrong:0 };
+        const isWeak = stat.seen >= 2 && stat.wrong > stat.correct;
+        if (g > maxGrade)      previewPool.push(q);
+        else if (isWeak)       reviewPool.push(q);
+        else                   normalPool.push(q);
+      });
+    });
+
+    if (subject === 'math') {
+      this.generateMathPool(maxGrade).forEach(q => normalPool.push(q));
+    }
+
+    const selected = [];
+    const pick = (pool, n) => shuf(pool).slice(0, n);
+    selected.push(...pick(reviewPool, Math.min(2, reviewPool.length)));
+    selected.push(...pick(normalPool, Math.min(count - selected.length - 1, normalPool.length)));
+    if (previewPool.length) selected.push(...pick(previewPool, 1));
+    if (selected.length < count) {
+      const rest = [...reviewPool, ...normalPool, ...previewPool].filter(q => !selected.includes(q));
+      selected.push(...pick(rest, count - selected.length));
+    }
+    return selected.slice(0, count);
+  }
+
+  generateMathPool(maxGrade) {
+    const pool = [];
+    const r = (mn, mx) => mn + Math.floor(Math.random()*(mx-mn+1));
+    const shuf = arr => [...arr].sort(() => Math.random()-0.5);
+    const wrongs = (ans, n) => {
+      const set = new Set();
+      let tries = 0;
+      while (set.size < n && tries < 50) {
+        tries++;
+        const w = ans + r(-6,6);
+        if (w !== ans && w > 0) set.add(w);
+      }
+      return [...set].slice(0,n);
+    };
+
+    for (let i = 0; i < 10; i++) {
+      if (maxGrade >= 2) {
+        const a=r(10,49), b=r(10,49), ans=a+b;
+        const opts=shuf([ans,...wrongs(ans,3)]);
+        pool.push({ id:`gen_add2_${i}`, grade:2, subject:'math',
+          q:`${a} ＋ ${b} ＝ ？`, opts:opts.map(String), correct:opts.indexOf(ans),
+          explain:`${a}＋${b}＝${ans}！` });
+        const c=r(20,79), d=r(10,Math.min(c,40)), ans2=c-d;
+        const opts2=shuf([ans2,...wrongs(ans2,3)]);
+        pool.push({ id:`gen_sub2_${i}`, grade:2, subject:'math',
+          q:`${c} ー ${d} ＝ ？`, opts:opts2.map(String), correct:opts2.indexOf(ans2),
+          explain:`${c}ー${d}＝${ans2}！` });
+      }
+      if (maxGrade >= 3) {
+        const a=r(2,9), b=r(2,9), ans=a*b;
+        const opts=shuf([ans,...wrongs(ans,3)]);
+        pool.push({ id:`gen_mult3_${i}`, grade:3, subject:'math',
+          q:`${a} × ${b} ＝ ？`, opts:opts.map(String), correct:opts.indexOf(ans),
+          explain:`${a}×${b}＝${ans}！${a}のだんで覚えよう！` });
+        const c=r(2,9), d=r(2,9), ans2=c*d;
+        const opts2=shuf([c,...wrongs(c,3)]);
+        pool.push({ id:`gen_div3_${i}`, grade:3, subject:'math',
+          q:`${ans2} ÷ ${d} ＝ ？`, opts:opts2.map(String), correct:opts2.indexOf(c),
+          explain:`${ans2}÷${d}＝${c}！${d}×${c}＝${ans2}だから！` });
+      }
+      if (maxGrade >= 4) {
+        const a=r(11,29), b=r(2,9), ans=a*b;
+        const opts=shuf([ans,...wrongs(ans,3)]);
+        pool.push({ id:`gen_mult4_${i}`, grade:4, subject:'math',
+          q:`${a} × ${b} ＝ ？`, opts:opts.map(String), correct:opts.indexOf(ans),
+          explain:`${a}×${b}＝${ans}！くふうして計算しよう！` });
+      }
+      if (maxGrade >= 5) {
+        const a=r(1,9), b=r(2,9);
+        const ans=parseFloat((a*b/10).toFixed(1));
+        const ansCents=Math.round(ans*10);
+        const opts=shuf([ans,...wrongs(ansCents,3).map(x=>parseFloat((x/10).toFixed(1)))]);
+        pool.push({ id:`gen_dec5_${i}`, grade:5, subject:'math',
+          q:`0.${a} × ${b} ＝ ？`, opts:opts.map(String), correct:opts.findIndex(x=>x===ans),
+          explain:`0.${a}×${b}＝${ans}！小数点に気をつけよう！` });
+      }
+    }
+    return pool;
   }
 
   // ===== STATE =====
@@ -204,6 +349,8 @@ class Game {
     Object.assign(this.sunLight.shadow.camera, { left:-70, right:70, top:70, bottom:-70, far:200 });
     this.scene.add(this.sunLight);
 
+    this.initQuestionIds();
+    this.playerStats = this.loadStats();
     this.buildDayNightVisuals();
     this.buildWorld();
     const savedCharId = localStorage.getItem(CHAR_STORAGE_KEY) || 'steve';
@@ -1211,9 +1358,7 @@ class Game {
 
   // ===== QUIZ =====
   startQuiz(portal) {
-    const sd = QUIZ_DATA[portal.subject];
-    const allQ = Object.values(sd.grades).flat();
-    const qs = [...allQ].sort(() => Math.random()-0.5).slice(0, QUIZ_PER_SESSION);
+    const qs = this.selectAdaptiveQuestions(portal.subject, QUIZ_PER_SESSION);
 
     this.quiz = { portal, questions:qs, cur:0, correct:0, answered:false };
     document.getElementById('quiz-icon').textContent = portal.icon;
@@ -1249,6 +1394,7 @@ class Game {
 
     const q = quiz.questions[quiz.cur];
     const ok = idx === q.correct;
+    this.updateQuestionStat(q.id, ok);
 
     document.querySelectorAll('.quiz-option').forEach((btn, i) => {
       btn.disabled = true;
