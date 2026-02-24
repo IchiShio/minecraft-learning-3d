@@ -62,6 +62,27 @@ const CHARACTER_DEFS = [
 
 const CHAR_STORAGE_KEY = 'mclearn3d_char';
 
+// ===== MOB DEFINITIONS =====
+const MOB_TYPES = {
+  zombie:   { hostile:true,  speed:0.022, chaseR:12, fleeR:0,  skin:'#4A9A4A', shirt:'#2A6A2A', pants:'#1A4A1A', shoes:'#0A2A0A', flying:false },
+  creeper:  { hostile:true,  speed:0.020, chaseR:10, fleeR:0,  skin:'#55AA55', shirt:'#3A8A3A', pants:'#2A6A2A', shoes:'#1A5A1A', flying:false },
+  skeleton: { hostile:true,  speed:0.025, chaseR:14, fleeR:0,  skin:'#D8D8D8', shirt:'#C0C0C0', pants:'#B0B0B0', shoes:'#A0A0A0', flying:false },
+  pig:      { hostile:false, speed:0.015, chaseR:0,  fleeR:5,  skin:'#F0B0A0', shirt:'#E89888', pants:'#E89888', shoes:'#D07060', flying:false },
+  sheep:    { hostile:false, speed:0.015, chaseR:0,  fleeR:5,  skin:'#D8D8C0', shirt:'#DDDDC8', pants:'#D0D0B8', shoes:'#B0B0A0', flying:false },
+  chicken:  { hostile:false, speed:0.012, chaseR:0,  fleeR:4,  skin:'#FFFFFF', shirt:'#EEEEEE', pants:'#FFB040', shoes:'#FF8800', flying:false },
+  ghast:    { hostile:true,  speed:0.013, chaseR:20, fleeR:0,  skin:'#F0F0F0', shirt:'#F8F8F8', pants:'#E8E8E8', shoes:'#D8D8D8', flying:true  },
+};
+
+const MOB_SPAWN_LIST = [
+  {type:'zombie',   x:15,   z:10 }, {type:'zombie',   x:-15, z:10 }, {type:'zombie',   x:18, z:-5  },
+  {type:'creeper',  x:10,   z:18 }, {type:'creeper',  x:-20, z:-8 },
+  {type:'skeleton', x:-10,  z:-18}, {type:'skeleton', x:20,  z:15 },
+  {type:'pig',      x:5,    z:12 }, {type:'pig',      x:-5,  z:15 }, {type:'pig',      x:10, z:-9  },
+  {type:'sheep',    x:-8,   z:12 }, {type:'sheep',    x:7,   z:-12}, {type:'sheep',    x:-12,z:6   },
+  {type:'chicken',  x:3,    z:14 }, {type:'chicken',  x:-3,  z:-14}, {type:'chicken',  x:15, z:-12 },
+  {type:'ghast',    x:8,    z:16 }, {type:'ghast',    x:-16, z:8  },
+];
+
 function hexDarken(hex, f) {
   hex = hex.replace('#','');
   if (hex.length===3) hex=hex.split('').map(c=>c+c).join('');
@@ -92,6 +113,8 @@ class Game {
     this.gameRunning = false;
     this.frame = 0;
     this.vx = 0; this.vz = 0; // velocity for smooth movement
+    this.mobs = [];
+    this.fireballs = [];
     this.isMobile = 'ontouchstart' in window || window.innerWidth < 900;
   }
 
@@ -175,6 +198,7 @@ class Game {
     this.buildPlayer(this.currentChar);
     this.buildBuildings();
     this.buildPortals();
+    this.spawnMobs();
     this.setupControls();
     this.loop();
   }
@@ -507,6 +531,236 @@ class Game {
     });
   }
 
+  // ===== MOBS =====
+  makeMobHeadTex(type) {
+    const c = document.createElement('canvas');
+    c.width = 16; c.height = 16;
+    const g = c.getContext('2d');
+    g.imageSmoothingEnabled = false;
+    const def = MOB_TYPES[type];
+    g.fillStyle = def.skin; g.fillRect(0,0,16,16);
+    if (type === 'zombie') {
+      g.fillStyle='#111'; g.fillRect(2,4,4,5); g.fillRect(10,4,4,5);
+      g.fillStyle='#6FDD6F'; g.fillRect(3,5,2,3); g.fillRect(11,5,2,3);
+      g.fillStyle='#1A3A1A'; g.fillRect(5,10,6,2);
+      g.fillStyle='#CCFFCC'; g.fillRect(4,12,3,1); g.fillRect(9,12,3,1);
+    } else if (type === 'creeper') {
+      g.fillStyle='#1A1A1A';
+      g.fillRect(2,4,3,4); g.fillRect(11,4,3,4);
+      g.fillRect(5,9,2,2); g.fillRect(9,9,2,2);
+      g.fillRect(4,11,8,4);
+    } else if (type === 'skeleton') {
+      g.fillStyle='#111'; g.fillRect(2,4,4,5); g.fillRect(10,4,4,5);
+      g.fillStyle='#555'; g.fillRect(3,5,2,3); g.fillRect(11,5,2,3);
+      g.fillStyle='#111'; g.fillRect(5,9,2,2);
+      g.fillStyle='#E8E8E8'; g.fillRect(3,12,2,2); g.fillRect(7,12,2,2); g.fillRect(11,12,2,2);
+    } else if (type === 'pig') {
+      g.fillStyle='#E88888'; g.fillRect(0,0,16,16);
+      g.fillStyle='#222'; g.fillRect(2,4,3,3); g.fillRect(11,4,3,3);
+      g.fillStyle='#CC6060'; g.fillRect(3,9,10,5);
+      g.fillStyle='#111'; g.fillRect(5,10,2,2); g.fillRect(9,10,2,2);
+    } else if (type === 'sheep') {
+      g.fillStyle='#222'; g.fillRect(3,5,3,3); g.fillRect(10,5,3,3);
+      g.fillStyle='#AAA'; g.fillRect(5,10,6,3);
+    } else if (type === 'chicken') {
+      g.fillStyle='#222'; g.fillRect(3,4,3,3); g.fillRect(10,4,3,3);
+      g.fillStyle='#FF8800'; g.fillRect(5,8,6,2);
+      g.fillStyle='#FF4400'; g.fillRect(6,10,4,4);
+      g.fillStyle='#FF0000'; g.fillRect(5,12,3,2);
+    } else if (type === 'ghast') {
+      g.fillStyle='#111';
+      g.fillRect(3,5,2,3); g.fillRect(11,5,2,3);
+      g.fillRect(4,10,8,2);
+      g.fillStyle='#666'; g.fillRect(4,5,1,2); g.fillRect(12,5,1,2);
+    }
+    const t = new THREE.CanvasTexture(c);
+    t.magFilter = THREE.NearestFilter;
+    t.minFilter = THREE.NearestFilter;
+    return t;
+  }
+
+  buildMobMesh(type, spawnX, spawnZ) {
+    const def = MOB_TYPES[type];
+    const g = new THREE.Group();
+    const mkMat = hex => new THREE.MeshLambertMaterial({ color: new THREE.Color(hex) });
+    const skinM = mkMat(def.skin);
+    const shirtM = mkMat(def.shirt);
+    const pantsM = mkMat(def.pants);
+    const shoesM = mkMat(def.shoes);
+    const faceTex = this.makeMobHeadTex(type);
+    const faceM = new THREE.MeshLambertMaterial({ map: faceTex });
+    const headMats = [skinM, skinM, skinM, skinM, faceM, skinM];
+
+    if (type === 'ghast') {
+      const hs = 1.2;
+      const head = new THREE.Mesh(new THREE.BoxGeometry(hs,hs,hs), headMats);
+      g.add(head);
+      for (let tx=-1; tx<=1; tx++) for (let tz=-1; tz<=1; tz++) {
+        const th = 0.28+Math.random()*0.42;
+        const t2 = new THREE.Mesh(new THREE.BoxGeometry(0.1,th,0.1), mkMat(def.skin));
+        t2.position.set(tx*0.37, -hs/2-th/2, tz*0.37); g.add(t2);
+      }
+      g.position.set(spawnX, 9+Math.random()*2, spawnZ);
+      g.userData = { type, def, state:'wander', wanderTimer:0, wanderDx:0, wanderDz:0, fireCooldown:Math.floor(120+Math.random()*180), legL:null, legR:null };
+      return g;
+    }
+
+    if (type === 'pig' || type === 'sheep' || type === 'chicken') {
+      const bw = type==='chicken'?0.35:0.55;
+      const bh = type==='chicken'?0.28:0.38;
+      const bd = type==='chicken'?0.42:0.70;
+      const body = new THREE.Mesh(new THREE.BoxGeometry(bw,bh,bd), shirtM);
+      body.position.y = 0.40; g.add(body);
+      const hs = type==='chicken'?0.24:0.30;
+      const head = new THREE.Mesh(new THREE.BoxGeometry(hs,hs,hs), headMats);
+      head.position.set(0, 0.54, bd/2+hs*0.4); g.add(head);
+      const lh = type==='chicken'?0.16:0.24, lw = type==='chicken'?0.09:0.12;
+      const legFL = new THREE.Mesh(new THREE.BoxGeometry(lw,lh,lw), pantsM); legFL.position.set(-bw*0.28, lh/2, bd*0.27); g.add(legFL);
+      const legFR = new THREE.Mesh(new THREE.BoxGeometry(lw,lh,lw), pantsM); legFR.position.set( bw*0.28, lh/2, bd*0.27); g.add(legFR);
+      const legBL = new THREE.Mesh(new THREE.BoxGeometry(lw,lh,lw), pantsM); legBL.position.set(-bw*0.28, lh/2,-bd*0.27); g.add(legBL);
+      const legBR = new THREE.Mesh(new THREE.BoxGeometry(lw,lh,lw), pantsM); legBR.position.set( bw*0.28, lh/2,-bd*0.27); g.add(legBR);
+      if (type === 'sheep') {
+        const wool = new THREE.Mesh(new THREE.BoxGeometry(bw+0.12,bh+0.1,bd+0.12), mkMat('#DDDDC8'));
+        wool.position.y = 0.42; g.add(wool);
+      }
+      if (type === 'chicken') {
+        const wL = new THREE.Mesh(new THREE.BoxGeometry(0.05,0.18,0.32), mkMat('#EEEEEE'));
+        wL.position.set(-bw/2-0.03, 0.42, 0); g.add(wL);
+        const wR = new THREE.Mesh(new THREE.BoxGeometry(0.05,0.18,0.32), mkMat('#EEEEEE'));
+        wR.position.set( bw/2+0.03, 0.42, 0); g.add(wR);
+      }
+      g.position.set(spawnX, 0, spawnZ);
+      g.userData = { type, def, state:'wander', wanderTimer:0, wanderDx:0, wanderDz:0, fireCooldown:9999, legL:legFL, legR:legBR };
+      return g;
+    }
+
+    // Biped: zombie, creeper, skeleton
+    const hs = 0.44, bh = 0.55, lh = 0.44;
+    const head = new THREE.Mesh(new THREE.BoxGeometry(hs,hs,hs), headMats);
+    head.position.y = lh+bh+hs/2+0.05; g.add(head);
+    const body = new THREE.Mesh(new THREE.BoxGeometry(hs*1.1,bh,hs*0.55), shirtM);
+    body.position.y = lh+bh/2; g.add(body);
+    const legL = new THREE.Mesh(new THREE.BoxGeometry(hs*0.42,lh,hs*0.42), pantsM);
+    legL.position.set(-hs*0.24, lh/2, 0); g.add(legL);
+    const legR = new THREE.Mesh(new THREE.BoxGeometry(hs*0.42,lh,hs*0.42), pantsM);
+    legR.position.set( hs*0.24, lh/2, 0); g.add(legR);
+    const armL = new THREE.Mesh(new THREE.BoxGeometry(0.17,0.46,0.17), shirtM);
+    const armR = new THREE.Mesh(new THREE.BoxGeometry(0.17,0.46,0.17), shirtM);
+    if (type === 'zombie') {
+      armL.position.set(-hs*0.76, lh+bh-0.05, 0.14); armL.rotation.x = -Math.PI/2.4;
+      armR.position.set( hs*0.76, lh+bh-0.05, 0.14); armR.rotation.x = -Math.PI/2.4;
+    } else {
+      armL.position.set(-hs*0.76, lh+bh*0.5, 0);
+      armR.position.set( hs*0.76, lh+bh*0.5, 0);
+    }
+    g.add(armL); g.add(armR);
+    if (type === 'skeleton') {
+      const bow = new THREE.Mesh(new THREE.BoxGeometry(0.05,0.54,0.05), mkMat('#8B6914'));
+      bow.position.set(hs*0.76+0.14, lh+bh*0.5, 0.12); g.add(bow);
+    }
+    g.position.set(spawnX, 0, spawnZ);
+    g.userData = { type, def, state:'wander', wanderTimer:0, wanderDx:0, wanderDz:0, fireCooldown:9999, legL, legR };
+    return g;
+  }
+
+  spawnMobs() {
+    this.mobs = [];
+    this.fireballs = [];
+    MOB_SPAWN_LIST.forEach(sp => {
+      const m = this.buildMobMesh(sp.type, sp.x, sp.z);
+      this.scene.add(m);
+      this.mobs.push(m);
+    });
+  }
+
+  updateMobs() {
+    const px = this.player.position.x, pz = this.player.position.z;
+
+    this.mobs.forEach(mob => {
+      const ud = mob.userData, def = ud.def;
+
+      if (def.flying) {
+        mob.position.y = 9 + Math.sin(Date.now()*0.0009 + mob.position.x*0.3) * 1.8;
+        const dx = px - mob.position.x, dz = pz - mob.position.z;
+        const dist = Math.hypot(dx, dz);
+        if (dist < def.chaseR && dist > 0.5) {
+          mob.position.x += (dx/dist)*def.speed*0.5;
+          mob.position.z += (dz/dist)*def.speed*0.5;
+          mob.rotation.y = Math.atan2(dx, dz);
+          ud.fireCooldown--;
+          if (ud.fireCooldown <= 0) {
+            this.spawnFireball(mob);
+            ud.fireCooldown = 160+Math.floor(Math.random()*100);
+          }
+        } else {
+          ud.wanderTimer--;
+          if (ud.wanderTimer <= 0) {
+            const a = Math.random()*Math.PI*2;
+            ud.wanderDx = Math.cos(a); ud.wanderDz = Math.sin(a);
+            ud.wanderTimer = 80+Math.floor(Math.random()*120);
+          }
+          mob.position.x = Math.max(-42, Math.min(42, mob.position.x + ud.wanderDx*def.speed*0.4));
+          mob.position.z = Math.max(-42, Math.min(42, mob.position.z + ud.wanderDz*def.speed*0.4));
+        }
+        return;
+      }
+
+      const dx = px - mob.position.x, dz = pz - mob.position.z;
+      const dist = Math.hypot(dx, dz);
+      let mvx = 0, mvz = 0;
+
+      if (def.hostile && dist < def.chaseR && dist > 0.5) {
+        mvx = (dx/dist)*def.speed; mvz = (dz/dist)*def.speed;
+      } else if (!def.hostile && dist < def.fleeR && dist > 0.5) {
+        mvx = -(dx/dist)*def.speed*1.2; mvz = -(dz/dist)*def.speed*1.2;
+      } else {
+        ud.wanderTimer--;
+        if (ud.wanderTimer <= 0) {
+          if (Math.random() < 0.28) { ud.wanderDx=0; ud.wanderDz=0; }
+          else { const a=Math.random()*Math.PI*2; ud.wanderDx=Math.cos(a); ud.wanderDz=Math.sin(a); }
+          ud.wanderTimer = 90+Math.floor(Math.random()*150);
+        }
+        mvx = ud.wanderDx*def.speed*0.45; mvz = ud.wanderDz*def.speed*0.45;
+      }
+
+      mob.position.x = Math.max(-42, Math.min(42, mob.position.x + mvx));
+      mob.position.z = Math.max(-42, Math.min(42, mob.position.z + mvz));
+      const spd = Math.hypot(mvx, mvz);
+      if (spd > 0.001) mob.rotation.y = Math.atan2(mvx, mvz);
+      if (ud.legL && ud.legR && spd > 0.001) {
+        const sw = Math.sin(Date.now()*0.013)*0.55;
+        ud.legL.rotation.x = sw; ud.legR.rotation.x = -sw;
+      }
+    });
+
+    // Fireballs
+    this.fireballs = this.fireballs.filter(fb => {
+      fb.userData.life--;
+      fb.position.x += fb.userData.vx;
+      fb.position.y += fb.userData.vy;
+      fb.position.z += fb.userData.vz;
+      fb.rotation.x += 0.15; fb.rotation.z += 0.1;
+      if (fb.userData.life <= 0) { this.scene.remove(fb); return false; }
+      if (Math.hypot(fb.position.x-px, fb.position.z-pz) < 1.2) { this.scene.remove(fb); return false; }
+      return true;
+    });
+  }
+
+  spawnFireball(mob) {
+    const fb = new THREE.Mesh(
+      new THREE.BoxGeometry(0.35,0.35,0.35),
+      new THREE.MeshBasicMaterial({ color:0xFF6600 })
+    );
+    fb.position.copy(mob.position);
+    const px = this.player.position.x, pz = this.player.position.z;
+    const dx = px-mob.position.x, dy = 1.2-mob.position.y, dz = pz-mob.position.z;
+    const dist = Math.hypot(dx, dy, dz);
+    const spd = 0.2;
+    fb.userData = { vx:(dx/dist)*spd, vy:(dy/dist)*spd*0.4, vz:(dz/dist)*spd, life:90 };
+    this.scene.add(fb);
+    this.fireballs.push(fb);
+  }
+
   // ===== CONTROLS =====
   setupControls() {
     addEventListener('keydown', e => {
@@ -616,6 +870,7 @@ class Game {
     this.movePlayer();
     this.followCamera();
     this.glowPortals();
+    this.updateMobs();
     this.checkNearby();
     this.renderer.render(this.scene, this.camera);
   }
@@ -633,9 +888,9 @@ class Game {
     if (this.joystick.active) { dx += this.joystick.x; dz += this.joystick.y; }
 
     const len = Math.hypot(dx, dz);
-    const ACCEL = 0.026;
+    const ACCEL = 0.055;
     const FRICTION = 0.76;
-    const MAX_SPD = 0.19;
+    const MAX_SPD = 0.38;
 
     if (len > 0.01) {
       dx /= len; dz /= len;
