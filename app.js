@@ -3,6 +3,8 @@
 // ===== CONSTANTS =====
 const STORAGE_KEY = 'mclearn3d_v1';
 const STATS_KEY = 'mclearn3d_stats_v1';
+const SETTINGS_KEY = 'mclearn3d_settings_v1';
+const DEFAULT_SETTINGS = { speed: 1.0, bgmVol: 0.5, seVol: 0.7 };
 // レベルから現在の学年を返す (Lv1-2=2年生, Lv3-5=3年生, ...)
 const GRADE_FOR_LEVEL = lv => lv <= 2 ? 2 : lv <= 5 ? 3 : lv <= 9 ? 4 : lv <= 14 ? 5 : 6;
 const QUIZ_PER_SESSION = 5;
@@ -98,6 +100,56 @@ function hexDarken(hex, f) {
   return `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`;
 }
 
+// ===== AUDIO DEFINITIONS =====
+const NOTE_FREQ = (() => {
+  const base = { C:0, D:2, E:4, F:5, G:7, A:9, B:11 };
+  return function(n) {
+    if (n === 'R') return 0;
+    const m = n.match(/^([A-G])(#|b)?(\d)$/);
+    if (!m) return 440;
+    const semi = (parseInt(m[3]) - 4) * 12 + base[m[1]] + (m[2]==='#'?1:m[2]==='b'?-1:0);
+    return 440 * Math.pow(2, semi / 12);
+  };
+})();
+
+const BGM_DEFS = {
+  field: {
+    bpm: 100, type: 'sine',
+    notes: [
+      ['C4',0.5],['E4',0.5],['G4',0.5],['C5',0.5],
+      ['B4',0.5],['G4',0.5],['E4',0.5],['G4',0.5],
+      ['A4',0.5],['C5',0.5],['E5',0.5],['A4',0.5],
+      ['G4',1.0],['R',0.5],['E4',0.5],
+      ['F4',0.5],['A4',0.5],['C5',0.5],['F4',0.5],
+      ['E4',1.0],['R',0.5],['G4',0.5],
+      ['D4',0.5],['F4',0.5],['A4',0.5],['D4',0.5],
+      ['C4',2.0],
+    ],
+  },
+  night: {
+    bpm: 68, type: 'triangle',
+    notes: [
+      ['A3',1.0],['C4',1.0],['E4',1.0],['A4',2.0],['R',1.0],
+      ['G3',1.0],['B3',1.0],['D4',1.0],['G4',2.0],['R',1.0],
+      ['F3',1.0],['A3',1.0],['C4',1.0],['F4',2.0],['R',1.0],
+      ['E3',1.0],['G3',1.0],['B3',1.0],['E4',2.0],['R',1.0],
+    ],
+  },
+  quiz: {
+    bpm: 128, type: 'square',
+    notes: [
+      ['E4',0.5],['G4',0.5],['A4',0.5],['B4',0.5],
+      ['C5',1.0],['B4',0.5],['A4',0.5],
+      ['G4',0.5],['A4',0.5],['B4',0.5],['C5',0.5],
+      ['D5',1.0],['R',1.0],
+      ['E5',0.5],['D5',0.5],['C5',0.5],['B4',0.5],
+      ['A4',1.0],['G4',0.5],['A4',0.5],
+      ['B4',0.5],['A4',0.5],['G4',0.5],['F4',0.5],
+      ['G4',2.0],
+    ],
+  },
+};
+
 // ===== GAME CLASS =====
 class Game {
   constructor() {
@@ -131,6 +183,14 @@ class Game {
     this.moonMesh = null;
     this.mobSpawnTimer = 0;
     this.isMobile = 'ontouchstart' in window || window.innerWidth < 900;
+    // Settings & Audio
+    this.settings = null;
+    this.audioCtx = null;
+    this.bgmGain = null;
+    this.seGain = null;
+    this.currentBgm = null;
+    this._bgmTimeout = null;
+    this._wasNight = false;
   }
 
   // ===== STATS & ADAPTIVE =====
@@ -299,6 +359,141 @@ class Game {
     this.saveState();
   }
 
+  // ===== SETTINGS =====
+  loadSettings() {
+    try { return Object.assign({}, DEFAULT_SETTINGS, JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}')); }
+    catch(e) { return { ...DEFAULT_SETTINGS }; }
+  }
+
+  saveSettings() {
+    try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(this.settings)); } catch(e) {}
+  }
+
+  openSettings() {
+    const s = this.settings;
+    const panel = document.getElementById('settings-panel');
+    // スピードボタン
+    document.querySelectorAll('.speed-btn').forEach(btn => {
+      btn.classList.toggle('active', parseFloat(btn.dataset.speed) === s.speed);
+    });
+    // 音量スライダー
+    const bgmSlider = document.getElementById('settings-bgm');
+    const seSlider  = document.getElementById('settings-se');
+    bgmSlider.value = Math.round(s.bgmVol * 100);
+    seSlider.value  = Math.round(s.seVol  * 100);
+    document.getElementById('settings-bgm-val').textContent = bgmSlider.value + '%';
+    document.getElementById('settings-se-val').textContent  = seSlider.value  + '%';
+    panel.classList.remove('hidden');
+  }
+
+  closeSettings() {
+    document.getElementById('settings-panel').classList.add('hidden');
+    this.saveSettings();
+  }
+
+  // ===== AUDIO =====
+  initAudio() {
+    if (this.audioCtx) return;
+    try {
+      this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      this.bgmGain = this.audioCtx.createGain();
+      this.bgmGain.gain.value = this.settings.bgmVol;
+      this.bgmGain.connect(this.audioCtx.destination);
+      this.seGain = this.audioCtx.createGain();
+      this.seGain.gain.value = this.settings.seVol;
+      this.seGain.connect(this.audioCtx.destination);
+    } catch(e) { this.audioCtx = null; }
+  }
+
+  playBgm(name) {
+    if (this.currentBgm === name) return;
+    this.stopBgm();
+    this.currentBgm = name;
+    this._scheduleBgm(name);
+  }
+
+  stopBgm() {
+    if (this._bgmTimeout) { clearTimeout(this._bgmTimeout); this._bgmTimeout = null; }
+    this.currentBgm = null;
+  }
+
+  _scheduleBgm(name) {
+    if (this.currentBgm !== name || !this.audioCtx || this.settings.bgmVol === 0) return;
+    const def = BGM_DEFS[name];
+    const beatSec = 60 / def.bpm;
+    const ac = this.audioCtx;
+    let t = ac.currentTime + 0.05;
+    let totalSec = 0;
+
+    def.notes.forEach(([n, dur]) => {
+      const freq = NOTE_FREQ(n);
+      const noteSec = dur * beatSec;
+      if (freq > 0) {
+        const osc = ac.createOscillator();
+        const g   = ac.createGain();
+        osc.type = def.type;
+        osc.frequency.value = freq;
+        const vol = name === 'quiz' ? 0.08 : 0.18;
+        g.gain.setValueAtTime(0.001, t);
+        g.gain.linearRampToValueAtTime(vol, t + 0.03);
+        g.gain.setValueAtTime(vol, t + noteSec - 0.06);
+        g.gain.linearRampToValueAtTime(0.001, t + noteSec);
+        osc.connect(g);
+        g.connect(this.bgmGain);
+        osc.start(t);
+        osc.stop(t + noteSec);
+      }
+      t += noteSec;
+      totalSec += noteSec;
+    });
+
+    this._bgmTimeout = setTimeout(() => this._scheduleBgm(name), (totalSec - 0.15) * 1000);
+  }
+
+  playSe(name) {
+    if (!this.audioCtx || this.settings.seVol === 0) return;
+    const ac = this.audioCtx;
+    const vol = this.settings.seVol;
+
+    const tone = (freq, dur, type='sine', startVol=0.35) => {
+      const osc = ac.createOscillator();
+      const g   = ac.createGain();
+      osc.type = type; osc.frequency.value = freq;
+      g.gain.setValueAtTime(startVol * vol, ac.currentTime);
+      g.gain.linearRampToValueAtTime(0, ac.currentTime + dur);
+      osc.connect(g); g.connect(this.seGain);
+      osc.start(); osc.stop(ac.currentTime + dur);
+    };
+
+    const sweep = (f0, f1, dur, type='sine') => {
+      const osc = ac.createOscillator();
+      const g   = ac.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(f0, ac.currentTime);
+      osc.frequency.linearRampToValueAtTime(f1, ac.currentTime + dur);
+      g.gain.setValueAtTime(0.35 * vol, ac.currentTime);
+      g.gain.linearRampToValueAtTime(0, ac.currentTime + dur);
+      osc.connect(g); g.connect(this.seGain);
+      osc.start(); osc.stop(ac.currentTime + dur);
+    };
+
+    if (name === 'correct') {
+      sweep(523, 784, 0.25);
+      setTimeout(() => tone(1047, 0.2), 180);
+    } else if (name === 'wrong') {
+      sweep(330, 180, 0.35, 'sawtooth');
+    } else if (name === 'levelup') {
+      [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => tone(f, 0.3), i * 110));
+    } else if (name === 'unlock') {
+      [784, 988, 1175, 1568].forEach((f, i) => setTimeout(() => tone(f, 0.25, 'triangle'), i * 90));
+    } else if (name === 'portal') {
+      sweep(440, 660, 0.2);
+      setTimeout(() => sweep(660, 440, 0.15), 150);
+    } else if (name === 'start') {
+      [261, 330, 392, 523].forEach((f, i) => setTimeout(() => tone(f, 0.3, 'sine', 0.28), i * 120));
+    }
+  }
+
   lvText(lv) {
     if (lv >= 20) return '🌟Lv.' + lv;
     if (lv >= 15) return '💫Lv.' + lv;
@@ -316,6 +511,7 @@ class Game {
       document.getElementById('levelup-lv').textContent = this.lvText(this.state.level);
       banner.classList.remove('hidden');
       setTimeout(() => banner.classList.add('hidden'), 2500);
+      this.playSe('levelup');
     }
   }
 
@@ -1064,6 +1260,15 @@ class Game {
     // 夜間警告ラベル更新
     const hudDay = document.getElementById('hud-day');
     if (hudDay) hudDay.textContent = this.isNightTime() ? `🌙 ${this.dayCount}日目` : `☀️ ${this.dayCount}日目`;
+
+    // 昼夜BGM切り替え（クイズ中は変えない）
+    if (this.gameRunning && !this.quiz) {
+      const night = this.isNightTime();
+      if (night !== this._wasNight) {
+        this._wasNight = night;
+        this.playBgm(night ? 'night' : 'field');
+      }
+    }
   }
 
   isNightTime() {
@@ -1249,9 +1454,10 @@ class Game {
     if (this.joystick.active) { dx += this.joystick.x; dz += this.joystick.y; }
 
     const len = Math.hypot(dx, dz);
-    const ACCEL = 0.055;
+    const spd = this.settings ? this.settings.speed : 1.0;
+    const ACCEL = 0.055 * spd;
     const FRICTION = 0.76;
-    const MAX_SPD = 0.38;
+    const MAX_SPD = 0.38 * spd;
 
     if (len > 0.01) {
       dx /= len; dz /= len;
@@ -1368,6 +1574,7 @@ class Game {
       if (d < nbd) { nbd=d; nb=b; }
     });
 
+    if (np && np !== this.nearPortal) this.playSe('portal');
     this.nearPortal = np;
     this.nearBuilding = nb;
 
@@ -1412,6 +1619,7 @@ class Game {
     document.getElementById('quiz-icon').textContent = portal.icon;
     document.getElementById('quiz-subject-name').textContent = portal.name;
     document.getElementById('quiz-overlay').classList.remove('hidden');
+    this.playBgm('quiz');
     this.renderQuestion();
   }
 
@@ -1503,6 +1711,7 @@ class Game {
 
   _recordResult(ok, q) {
     this.updateQuestionStat(q.id, ok);
+    this.playSe(ok ? 'correct' : 'wrong');
     const { quiz } = this;
     if (ok) {
       quiz.correct++;
@@ -1537,17 +1746,21 @@ class Game {
     document.getElementById('quiz-overlay').classList.add('hidden');
     this.quiz = null;
     this.vx = 0; this.vz = 0;
+    this.playBgm(this.isNightTime() ? 'night' : 'field');
   }
 
   goHome() {
     // Close any open modals
     document.getElementById('quiz-overlay').classList.add('hidden');
     document.getElementById('quiz-result').classList.add('hidden');
+    document.getElementById('settings-panel').classList.add('hidden');
     this.quiz = null;
     this.vx = 0; this.vz = 0;
     this.gameRunning = false;
+    this.stopBgm();
     document.getElementById('hud').classList.add('hidden');
     document.getElementById('btn-home').classList.add('hidden');
+    document.getElementById('btn-settings').classList.add('hidden');
     document.getElementById('world-clears').classList.add('hidden');
     document.getElementById('mobile-controls').classList.add('hidden');
     document.getElementById('interact-hint').classList.add('hidden');
@@ -1575,6 +1788,10 @@ class Game {
     this.addXP(xp);
     this.saveState();
     this.updateHUD();
+
+    if (newUnlocks.length) this.playSe('unlock');
+    // BGMをフィールドに戻す（昼夜に応じて）
+    this.playBgm(this.isNightTime() ? 'night' : 'field');
 
     document.getElementById('result-emoji').textContent = isPerfect ? '🌟' : correct >= total*0.6 ? '🎉' : '🍀';
     document.getElementById('result-title').textContent = isPerfect ? 'パーフェクト！！' : 'クリア！';
@@ -1615,15 +1832,20 @@ class Game {
     document.getElementById('title-screen').classList.add('hidden');
     document.getElementById('hud').classList.remove('hidden');
     document.getElementById('btn-home').classList.remove('hidden');
+    document.getElementById('btn-settings').classList.remove('hidden');
     document.getElementById('world-clears').classList.remove('hidden');
     if (this.isMobile) document.getElementById('mobile-controls').classList.remove('hidden');
     // モブ・昼夜リセット
     this.spawnMobs();
     this.dayTime = 0.30; // 朝からスタート
+    this._wasNight = false;
     this.dayCount = 1;
     this.mobSpawnTimer = 0;
     this.gameRunning = true;
     this.vx = 0; this.vz = 0;
+    this.initAudio();
+    this.playSe('start');
+    setTimeout(() => this.playBgm('field'), 600);
     this.updateHUD();
   }
 }
@@ -1644,6 +1866,7 @@ addEventListener('load', () => {
     txt.textContent = 'ワールドを生成中...';
 
     game = new Game();
+    game.settings = game.loadSettings();
     game.state = game.loadState();
     game.init();
 
@@ -1664,6 +1887,50 @@ addEventListener('load', () => {
         document.getElementById('btn-continue').addEventListener('click', () => {
           game.start();
         });
+
+        // 設定パネル（タイトルから）
+        document.getElementById('btn-settings-title').addEventListener('click', () => {
+          game.openSettings();
+        });
+        // 設定パネル（ゲーム中）
+        document.getElementById('btn-settings').addEventListener('click', () => {
+          game.openSettings();
+        });
+        document.getElementById('btn-settings-close').addEventListener('click', () => {
+          game.closeSettings();
+        });
+
+        // スピードボタン
+        document.querySelectorAll('.speed-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            game.settings.speed = parseFloat(btn.dataset.speed);
+            document.querySelectorAll('.speed-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+          });
+        });
+
+        // BGM音量スライダー
+        document.getElementById('settings-bgm').addEventListener('input', e => {
+          const v = parseInt(e.target.value) / 100;
+          game.settings.bgmVol = v;
+          document.getElementById('settings-bgm-val').textContent = e.target.value + '%';
+          if (game.bgmGain) game.bgmGain.gain.value = v;
+          // 0になったらBGM停止、再開
+          if (v === 0) game.stopBgm();
+          else if (!game.currentBgm && game.gameRunning) {
+            game.currentBgm = null;
+            game.playBgm(game.isNightTime() ? 'night' : 'field');
+          }
+        });
+
+        // SE音量スライダー
+        document.getElementById('settings-se').addEventListener('input', e => {
+          const v = parseInt(e.target.value) / 100;
+          game.settings.seVol = v;
+          document.getElementById('settings-se-val').textContent = e.target.value + '%';
+          if (game.seGain) game.seGain.gain.value = v;
+        });
+
       }, 500);
     }, 800);
   }, 400);

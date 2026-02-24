@@ -28,6 +28,7 @@
   <button class="btn-title" id="btn-start">▶ スタート</button>
   <button class="btn-title" id="btn-continue" style="background:linear-gradient(180deg,#88ccff,#3366aa);box-shadow:0 4px 0 #1a3a77;color:#fff;">つづきから</button>
   <button class="btn-title" id="btn-char" style="background:linear-gradient(180deg,#cc88ff,#8833cc);box-shadow:0 4px 0 #5511aa;color:#fff;">🧑 キャラクター</button>
+  <button class="btn-title" id="btn-settings-title" style="background:linear-gradient(180deg,#aaaaaa,#666666);box-shadow:0 4px 0 #333333;color:#fff;">⚙️ せってい</button>
 </div>
 
 <!-- Character Select -->
@@ -56,6 +57,7 @@
   <div class="hud-day" id="hud-day">☀️ 1日目</div>
 </div>
 <button class="hud-home-btn hidden" id="btn-home">🏠 ホーム</button>
+<button class="hud-settings-btn hidden" id="btn-settings">⚙️</button>
 
 <!-- World Clears Panel -->
 <div id="world-clears" class="hidden">
@@ -82,6 +84,30 @@
     </div>
   </div>
   <button id="btn-interact" class="hidden">E</button>
+</div>
+
+<!-- Settings Panel -->
+<div id="settings-panel" class="hidden">
+  <div class="settings-inner">
+    <div class="settings-title">⚙️ せってい</div>
+    <div class="settings-section">
+      <div class="settings-label">🏃 いどうスピード</div>
+      <div class="settings-speed-btns">
+        <button class="speed-btn" data-speed="0.6">🐢 おそい</button>
+        <button class="speed-btn" data-speed="1.0">👣 ふつう</button>
+        <button class="speed-btn" data-speed="1.6">🐇 はやい</button>
+      </div>
+    </div>
+    <div class="settings-section">
+      <div class="settings-label">🎵 BGM おんりょう <span id="settings-bgm-val">50%</span></div>
+      <input type="range" class="settings-slider" id="settings-bgm" min="0" max="100" step="5" value="50">
+    </div>
+    <div class="settings-section">
+      <div class="settings-label">🔔 こうかおん おんりょう <span id="settings-se-val">70%</span></div>
+      <input type="range" class="settings-slider" id="settings-se" min="0" max="100" step="5" value="70">
+    </div>
+    <button class="settings-close-btn" id="btn-settings-close">✓ とじる</button>
+  </div>
 </div>
 
 <!-- Quiz Overlay -->
