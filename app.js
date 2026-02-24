@@ -17,6 +17,7 @@ const DEFAULT_STATE = {
   perfectClears: 0, maxStreak: 0, currentStreak: 0,
   worldClears: { math: 0, japanese: 0, english: 0 },
   achievements: [],
+  adaptiveBias: 0,   // -2〜+2: 自動難易度オフセット（毎日更新）
 };
 
 // ===== BUILDING DEFINITIONS =====
@@ -198,6 +199,9 @@ class Game {
     this.interiorGroup = null;
     this.prevPlayerPos = null;
     this.lookState = { up: false, down: false };
+    // 当日の回答集計（1日の終わりに自動難易度調整に使う）
+    this.todayCorrect = 0;
+    this.todayWrong   = 0;
   }
 
   // ===== STATS & ADAPTIVE =====
@@ -247,6 +251,45 @@ class Game {
       .map(([topic]) => topic);
   }
 
+  // 1日の終わりに呼ばれる。正解率から adaptiveBias を更新する
+  onNewDay() {
+    const total = this.todayCorrect + this.todayWrong;
+    if (total >= 3) {
+      const acc = this.todayCorrect / total;
+      const prev = this.state.adaptiveBias || 0;
+      let next = prev;
+      if (acc >= 0.80 && next < 2)  next++;
+      if (acc <  0.50 && next > -2) next--;
+      if (next !== prev) {
+        this.state.adaptiveBias = next;
+        const pct = Math.round(acc * 100);
+        const msg = next > prev
+          ? `🌟 もんだいレベルアップ！\n正解率 ${pct}% → すこし むずかしくなるよ`
+          : `🌱 もんだいを やさしくしました\n正解率 ${pct}% → もう すこし がんばろう`;
+        this._showToast(msg);
+        this.saveState();
+      }
+    }
+    this.todayCorrect = 0;
+    this.todayWrong   = 0;
+  }
+
+  _showToast(msg) {
+    const div = document.createElement('div');
+    div.textContent = msg;
+    div.style.cssText = [
+      'position:fixed', 'top:50%', 'left:50%',
+      'transform:translate(-50%,-50%)',
+      'background:rgba(0,0,0,0.82)', 'color:#fff',
+      'padding:18px 28px', 'border-radius:14px',
+      'font-family:inherit', 'font-weight:900', 'font-size:1.05rem',
+      'z-index:9999', 'text-align:center', 'white-space:pre-line',
+      'pointer-events:none', 'line-height:1.6',
+    ].join(';');
+    document.body.appendChild(div);
+    setTimeout(() => div.remove(), 3000);
+  }
+
   selectAdaptiveQuestions(subject, count) {
     const sd = QUIZ_DATA[subject];
     const maxGrade = GRADE_FOR_LEVEL(this.state.level);
@@ -274,9 +317,16 @@ class Game {
 
     const selected = [];
     const pick = (pool, n) => shuf(pool).slice(0, n);
-    selected.push(...pick(reviewPool, Math.min(2, reviewPool.length)));
-    selected.push(...pick(normalPool, Math.min(count - selected.length - 1, normalPool.length)));
-    if (previewPool.length) selected.push(...pick(previewPool, 1));
+    // adaptiveBias (-2〜+2) でプール比率を調整
+    const bias = this.state ? (this.state.adaptiveBias || 0) : 0;
+    const diff = this.settings ? this.settings.difficulty : 'normal';
+    // easy設定中はpreviewを出さない; bias>0でpreviewを増やす
+    const maxPreview = (diff === 'easy') ? 0 : Math.max(0, Math.min(bias, 2));
+    // bias<0でreviewを最大3問に増やし苦手を繰り返す
+    const maxReview  = bias < 0 ? 3 : 2;
+    selected.push(...pick(reviewPool, Math.min(maxReview, reviewPool.length)));
+    selected.push(...pick(normalPool, Math.min(count - selected.length - maxPreview, normalPool.length)));
+    if (maxPreview && previewPool.length) selected.push(...pick(previewPool, Math.min(maxPreview, previewPool.length)));
     if (selected.length < count) {
       const rest = [...reviewPool, ...normalPool, ...previewPool].filter(q => !selected.includes(q));
       selected.push(...pick(rest, count - selected.length));
@@ -1272,6 +1322,7 @@ class Game {
     // 1日経過したら日数カウントアップ
     if (prevDayTime > 0.9 && this.dayTime < 0.1) {
       this.dayCount++;
+      this.onNewDay();
     }
     const t = this.dayTime;
 
@@ -1905,8 +1956,10 @@ class Game {
       this.state.totalCorrect++;
       this.state.currentStreak = (this.state.currentStreak||0) + 1;
       if (this.state.currentStreak > this.state.maxStreak) this.state.maxStreak = this.state.currentStreak;
+      this.todayCorrect++;
     } else {
       this.state.currentStreak = 0;
+      this.todayWrong++;
     }
     this.state.totalGames++;
     const correctLabel = (q.type === 'keypad') ? q.answer : q.opts[q.correct];
