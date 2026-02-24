@@ -1357,35 +1357,35 @@ class Game {
     });
     addEventListener('keyup', e => { this.keys[e.key] = false; });
 
-    // Joystick
-    const base = document.getElementById('joystick-base');
-    const stick = document.getElementById('joystick-stick');
-    let jX=0, jY=0;
-    const R = 38;
+    // Canvas swipe to move
+    if (this.isMobile) {
+      const canvas = document.getElementById('game-canvas');
+      let swipeStartX = 0, swipeStartY = 0;
+      const SWIPE_R = 70;
 
-    base.addEventListener('touchstart', e => {
-      e.preventDefault();
-      jX = e.touches[0].clientX; jY = e.touches[0].clientY;
-      this.joystick.active = true;
-    }, {passive:false});
+      canvas.addEventListener('touchstart', e => {
+        swipeStartX = e.touches[0].clientX;
+        swipeStartY = e.touches[0].clientY;
+        this.joystick.active = true;
+        this.joystick.x = 0; this.joystick.y = 0;
+      }, { passive: true });
 
-    base.addEventListener('touchmove', e => {
-      e.preventDefault();
-      let dx = e.touches[0].clientX - jX;
-      let dy = e.touches[0].clientY - jY;
-      const dist = Math.hypot(dx,dy);
-      if (dist > R) { dx=dx/dist*R; dy=dy/dist*R; }
-      stick.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
-      this.joystick.x = dx/R;
-      this.joystick.y = dy/R;
-    }, {passive:false});
+      canvas.addEventListener('touchmove', e => {
+        if (!this.joystick.active) return;
+        e.preventDefault();
+        const dx = e.touches[0].clientX - swipeStartX;
+        const dy = e.touches[0].clientY - swipeStartY;
+        this.joystick.x = Math.max(-1, Math.min(1, dx / SWIPE_R));
+        this.joystick.y = Math.max(-1, Math.min(1, dy / SWIPE_R));
+      }, { passive: false });
 
-    const stopJ = () => {
-      this.joystick.active=false; this.joystick.x=0; this.joystick.y=0;
-      stick.style.transform = 'translate(-50%, -50%)';
-    };
-    base.addEventListener('touchend', stopJ);
-    base.addEventListener('touchcancel', stopJ);
+      const stopSwipe = () => {
+        this.joystick.active = false;
+        this.joystick.x = 0; this.joystick.y = 0;
+      };
+      canvas.addEventListener('touchend', stopSwipe);
+      canvas.addEventListener('touchcancel', stopSwipe);
+    }
 
     // Interact btn
     const btnI = document.getElementById('btn-interact');

@@ -338,45 +338,26 @@ html, body {
 /* ===== CONTROLS (mobile) ===== */
 #mobile-controls {
   position: fixed;
-  bottom: max(20px, env(safe-area-inset-bottom));
-  left: 0; right: 0;
-  display: flex; justify-content: space-between; align-items: flex-end;
-  padding: 0 max(20px, env(safe-area-inset-left)) 0 max(20px, env(safe-area-inset-right));
+  bottom: max(24px, env(safe-area-inset-bottom));
+  right: max(24px, env(safe-area-inset-right));
+  display: flex;
   pointer-events: none;
 }
 #mobile-controls.hidden { display: none; }
 
-#joystick-wrap { pointer-events: all; }
-#joystick-base {
-  width: 100px; height: 100px;
-  background: rgba(255,255,255,0.15);
-  border: 3px solid rgba(255,255,255,0.4);
-  border-radius: 50%;
-  position: relative;
-  touch-action: none;
-}
-#joystick-stick {
-  width: 44px; height: 44px;
-  background: rgba(255,255,255,0.6);
-  border: 2px solid rgba(255,255,255,0.9);
-  border-radius: 50%;
-  position: absolute;
-  top: 50%; left: 50%;
-  transform: translate(-50%, -50%);
-  transition: transform 0.05s;
-}
-
 #btn-interact {
   pointer-events: all;
-  width: 72px; height: 72px;
-  background: rgba(125,255,79,0.8);
+  width: 88px; height: 88px;
+  background: rgba(125,255,79,0.85);
   border: 3px solid #4aff00;
   border-radius: 50%;
-  font-size: 1.4rem;
+  font-size: 1.1rem;
   font-weight: 900;
   cursor: pointer;
   color: #1a3a0a;
   display: flex; align-items: center; justify-content: center;
+  text-align: center;
+  line-height: 1.2;
   box-shadow: 0 4px 0 rgba(0,0,0,0.3);
 }
 #btn-interact.hidden { display: none; }
