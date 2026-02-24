@@ -29,9 +29,10 @@ Three.js製の3Dマイクラ風学習ゲーム。小学生（主に2年生〜6�
 
 ### 昼夜サイクル
 - `updateDayNight()` が毎フレーム呼ばれる
-- **JST（日本時間）にリアルタイム同期** している
-  - `const jstSec = ((now.getUTCHours() + 9) % 24) * 3600 + ...`
-  - 実時間の昼→ゲームも昼、夜→夜
+- **フレームベース**でゲーム内時間を進める（JST同期は廃止）
+  - `this.dayFrame++` → `this.dayTime = (this.dayFrame % DAY_LENGTH) / DAY_LENGTH`
+  - `DAY_LENGTH = 7200`（60fps想定で約2分/日）
+- ゲーム開始時は `dayTime = 0.3`（朝）からスタート
 - `isNightTime()`: dayTime < 0.22 または dayTime > 0.78 で夜判定
 
 ### モバイル操作（Dパッド）
@@ -40,13 +41,22 @@ Three.js製の3Dマイクラ風学習ゲーム。小学生（主に2年生〜6�
 - `dpadState { up/down/left/right }` で押下状態管理
 - `this.joystick { active, x, y }` に変換してPC操作と共通処理
 - マルチタッチ（2方向同時押し）で斜め移動対応
-- `this.isMobile = 'ontouchstart' in window || window.innerWidth < 900` でモバイル判定
+- `this.isMobile = navigator.maxTouchPoints > 0` でタッチデバイス判定
+  - **注意**: `(hover: hover) and (pointer: fine)` のCSS media queryはiPadでも一致する場合があるので使わない
+  - **注意**: `ontouchstart` や `window.innerWidth < 900` は信頼性が低い
 
 ### BGM・SE（Web Audio API）
 - BGM: field / night / quiz の3曲（プロシージャル）
 - `NOTE_FREQ()`: C4=261.63Hz を基準に音程計算（440Hzベースは間違い）
 - `AudioContext` は suspended 状態になるため、`_scheduleBgm()` 内で `ac.resume().then(doSchedule)` でリカバリ
 - 昼夜切り替えで自動的に field ↔ night BGMが切り替わる
+- BGMの重複再生防止: `_activeOscNodes[]` で全オシレータを追跡し、`stopBgm()` でフェードアウト後に `osc.stop()` する
+  - `stopBgm()` はタイムアウトクリアだけでなく実行中のオシレータも停止すること
+
+### Service Worker（PWA キャッシュ）
+- `sw.js` の `CACHE_NAME` を変更するとiPad等のキャッシュが強制更新される
+- ローカルファイルはcache-firstのため、コードを変えても古いキャッシュが配信され続けることがある
+- デバイスでUIが更新されない場合は `CACHE_NAME` をインクリメントして対処（v1→v2→v3...）
 
 ### クイズ問題文の漢字方針
 - **grade2** のデータは小学1〜2年生で習う漢字のみ使用する
