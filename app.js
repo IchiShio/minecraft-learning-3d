@@ -4,7 +4,7 @@
 const STORAGE_KEY = 'mclearn3d_v1';
 const STATS_KEY = 'mclearn3d_stats_v1';
 const SETTINGS_KEY = 'mclearn3d_settings_v1';
-const DEFAULT_SETTINGS = { speed: 1.0, bgmVol: 0.5, seVol: 0.7 };
+const DEFAULT_SETTINGS = { speed: 1.0, bgmVol: 0.5, seVol: 0.7, difficulty: 'normal' };
 // レベルから現在の学年を返す (Lv1-2=2年生, Lv3-5=3年生, ...)
 const GRADE_FOR_LEVEL = lv => lv <= 2 ? 2 : lv <= 5 ? 3 : lv <= 9 ? 4 : lv <= 14 ? 5 : 6;
 const QUIZ_PER_SESSION = 5;
@@ -80,7 +80,7 @@ const MOB_TYPES = {
 };
 
 // ゲーム1日の長さ(フレーム)、モブ上限
-const DAY_LENGTH      = 7200; // ≈2分/日 (60fps想定)
+const DAY_LENGTH      = 28800; // ≈8分/日 (60fps想定)
 const MOB_CAP_HOSTILE = 12;
 const MOB_CAP_PASSIVE = 10;
 
@@ -194,6 +194,9 @@ class Game {
     this._bgmTimeout = null;
     this._wasNight = false;
     this._activeOscNodes = [];
+    this.insideBuilding = false;
+    this.interiorGroup = null;
+    this.prevPlayerPos = null;
   }
 
   // ===== STATS & ADAPTIVE =====
@@ -253,6 +256,9 @@ class Game {
       const g = parseInt(grade);
       if (g > maxGrade + 1) return;
       qs.forEach(q => {
+        const diff = this.settings ? this.settings.difficulty : 'normal';
+        if (diff === 'easy' && q.diff === 'hard') return;
+        if (diff === 'normal' && q.diff === 'hard') return;
         const stat = this.playerStats[q.id] || { seen:0, correct:0, wrong:0 };
         const isWeak = stat.seen >= 2 && stat.wrong > stat.correct;
         if (g > maxGrade)      previewPool.push(q);
@@ -378,6 +384,10 @@ class Game {
     // スピードボタン
     document.querySelectorAll('.speed-btn').forEach(btn => {
       btn.classList.toggle('active', parseFloat(btn.dataset.speed) === s.speed);
+    });
+    // 難易度ボタン
+    document.querySelectorAll('.diff-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.diff === (s.difficulty || 'normal'));
     });
     // 音量スライダー
     const bgmSlider = document.getElementById('settings-bgm');
@@ -1369,9 +1379,45 @@ class Game {
     addEventListener('keydown', e => {
       this.keys[e.key] = true;
       if (e.key === 'e' || e.key === 'E') this.tryInteract();
-      // Camera rotation with Q/E... skip for simplicity
     });
     addEventListener('keyup', e => { this.keys[e.key] = false; });
+
+    // Camera drag (mouse): rotate angle & pitch
+    const canvas = document.getElementById('game-canvas');
+    let camDrag = null;
+    canvas.addEventListener('mousedown', e => {
+      camDrag = { x: e.clientX, y: e.clientY, angle: this.cameraAngle, pitch: this.cameraPitch };
+    });
+    window.addEventListener('mousemove', e => {
+      if (!camDrag) return;
+      this.cameraAngle = camDrag.angle - (e.clientX - camDrag.x) * 0.006;
+      this.cameraPitch = Math.max(-0.15, Math.min(0.80, camDrag.pitch - (e.clientY - camDrag.y) * 0.004));
+    });
+    window.addEventListener('mouseup', () => { camDrag = null; });
+
+    // Camera drag (touch on canvas): rotate angle & pitch
+    let touchCamId = null, touchCamStart = null;
+    canvas.addEventListener('touchstart', e => {
+      if (touchCamId !== null) return;
+      const t = e.changedTouches[0];
+      touchCamId = t.identifier;
+      touchCamStart = { x: t.clientX, y: t.clientY, angle: this.cameraAngle, pitch: this.cameraPitch };
+    }, { passive: true });
+    canvas.addEventListener('touchmove', e => {
+      if (touchCamId === null) return;
+      for (const t of e.changedTouches) {
+        if (t.identifier === touchCamId) {
+          this.cameraAngle = touchCamStart.angle - (t.clientX - touchCamStart.x) * 0.006;
+          this.cameraPitch = Math.max(-0.15, Math.min(0.80, touchCamStart.pitch - (t.clientY - touchCamStart.y) * 0.004));
+          break;
+        }
+      }
+    }, { passive: true });
+    canvas.addEventListener('touchend', e => {
+      for (const t of e.changedTouches) {
+        if (t.identifier === touchCamId) { touchCamId = null; break; }
+      }
+    }, { passive: true });
 
     // D-pad controls (常時有効: タッチ・マウス両対応)
     const dpadState = { up: false, down: false, left: false, right: false };
@@ -1523,8 +1569,13 @@ class Game {
       if (Math.hypot(this.vx, this.vz) < 0.002) { this.vx = 0; this.vz = 0; }
     }
 
-    this.player.position.x = Math.max(-48, Math.min(48, this.player.position.x + this.vx));
-    this.player.position.z = Math.max(-48, Math.min(48, this.player.position.z + this.vz));
+    if (this.insideBuilding) {
+      this.player.position.x = Math.max(195, Math.min(205, this.player.position.x + this.vx));
+      this.player.position.z = Math.max(195, Math.min(205, this.player.position.z + this.vz));
+    } else {
+      this.player.position.x = Math.max(-48, Math.min(48, this.player.position.x + this.vx));
+      this.player.position.z = Math.max(-48, Math.min(48, this.player.position.z + this.vz));
+    }
 
     const spd2 = Math.hypot(this.vx, this.vz);
     if (spd2 > 0.01) {
@@ -1542,7 +1593,7 @@ class Game {
     const py = this.player.position.y + 1.3;
     const pz = this.player.position.z;
     const ca = this.cameraAngle;
-    const cd = this.cameraDist;
+    const cd = this.insideBuilding ? 3 : this.cameraDist;
 
     const tx = px + Math.sin(ca)*cd;
     const ty = py + Math.tan(this.cameraPitch)*cd;
@@ -1638,8 +1689,14 @@ class Game {
       document.getElementById('bp-desc').textContent = nb.desc;
       document.getElementById('bp-lock').textContent = ok ? '✅ かいほう済み！' : `🔒 ${nb.condText}`;
       popup.classList.remove('hidden');
-      hint.classList.add('hidden');
-      btnI.classList.add('hidden');
+      if (ok) {
+        hint.textContent = `${nb.icon} ${nb.name}：E / タップ で はいる！`;
+        hint.classList.remove('hidden');
+        btnI.classList.remove('hidden');
+      } else {
+        hint.classList.add('hidden');
+        btnI.classList.add('hidden');
+      }
     } else {
       hint.classList.add('hidden');
       btnI.classList.add('hidden');
@@ -1649,11 +1706,78 @@ class Game {
 
   // ===== INTERACT =====
   tryInteract() {
+    if (this.insideBuilding) { this.exitBuilding(); return; }
     if (this.nearPortal && !this.quiz &&
         document.getElementById('quiz-overlay').classList.contains('hidden') &&
         document.getElementById('quiz-result').classList.contains('hidden')) {
       this.startQuiz(this.nearPortal);
+    } else if (this.nearBuilding && this.nearBuilding.cond(this.state)) {
+      this.enterBuilding(this.nearBuilding);
     }
+  }
+
+  _makeMesh(geo, mat, x, y, z) {
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(x, y, z);
+    return m;
+  }
+
+  enterBuilding(def) {
+    this.insideBuilding = true;
+    this.prevPlayerPos = this.player.position.clone();
+    const ix = 200, iy = 0, iz = 200;
+    const roomW = 12, roomH = 4.5, roomD = 12;
+    const g = new THREE.Group();
+    const wallMat = new THREE.MeshLambertMaterial({ color: def.color });
+    const floorMat = new THREE.MeshLambertMaterial({ color: 0x888866 });
+    const ceilMat  = new THREE.MeshLambertMaterial({ color: 0xbbbbbb });
+    // Floor
+    g.add(this._makeMesh(new THREE.BoxGeometry(roomW, 0.2, roomD), floorMat, 0, 0.1, 0));
+    // Ceiling
+    g.add(this._makeMesh(new THREE.BoxGeometry(roomW, 0.2, roomD), ceilMat, 0, roomH, 0));
+    // Walls (N, S, W, E)
+    g.add(this._makeMesh(new THREE.BoxGeometry(roomW, roomH, 0.2), wallMat, 0, roomH/2, -roomD/2));
+    g.add(this._makeMesh(new THREE.BoxGeometry(roomW, roomH, 0.2), wallMat, 0, roomH/2,  roomD/2));
+    g.add(this._makeMesh(new THREE.BoxGeometry(0.2, roomH, roomD), wallMat, -roomW/2, roomH/2, 0));
+    g.add(this._makeMesh(new THREE.BoxGeometry(0.2, roomH, roomD), wallMat,  roomW/2, roomH/2, 0));
+    // Simple furniture
+    const tableMat = new THREE.MeshLambertMaterial({ color: 0x8B5E3C });
+    g.add(this._makeMesh(new THREE.BoxGeometry(1.6, 0.1, 0.9), tableMat, 0, 1.0, -1.5));
+    g.add(this._makeMesh(new THREE.BoxGeometry(0.1, 1.0, 0.1), tableMat, 0, 0.5, -1.5));
+    // Chest
+    const chestMat = new THREE.MeshLambertMaterial({ color: 0x8B6914 });
+    g.add(this._makeMesh(new THREE.BoxGeometry(0.8, 0.6, 0.5), chestMat, 2, 0.3, 2));
+    // Interior light
+    const light = new THREE.PointLight(0xffe8c0, 1.2, 12);
+    light.position.set(0, roomH - 0.5, 0);
+    g.add(light);
+    g.position.set(ix, iy, iz);
+    this.scene.add(g);
+    this.interiorGroup = g;
+    this.player.position.set(ix, 1, iz + 2);
+    this.vx = 0; this.vz = 0;
+    document.getElementById('btn-exit-building').classList.remove('hidden');
+    document.getElementById('interact-hint').classList.add('hidden');
+    document.getElementById('building-popup').classList.add('hidden');
+    document.getElementById('btn-interact').classList.add('hidden');
+  }
+
+  exitBuilding() {
+    if (this.interiorGroup) {
+      this.scene.remove(this.interiorGroup);
+      this.interiorGroup.traverse(o => {
+        if (o.geometry) o.geometry.dispose();
+        if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m.dispose());
+      });
+      this.interiorGroup = null;
+    }
+    if (this.prevPlayerPos) {
+      this.player.position.copy(this.prevPlayerPos);
+      this.prevPlayerPos = null;
+    }
+    this.vx = 0; this.vz = 0;
+    this.insideBuilding = false;
+    document.getElementById('btn-exit-building').classList.add('hidden');
   }
 
   // ===== QUIZ =====
@@ -1953,6 +2077,20 @@ addEventListener('load', () => {
             document.querySelectorAll('.speed-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
           });
+        });
+
+        // 難易度ボタン
+        document.querySelectorAll('.diff-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            game.settings.difficulty = btn.dataset.diff;
+            document.querySelectorAll('.diff-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+          });
+        });
+
+        // 建物から出るボタン
+        document.getElementById('btn-exit-building').addEventListener('click', () => {
+          game.exitBuilding();
         });
 
         // BGM音量スライダー

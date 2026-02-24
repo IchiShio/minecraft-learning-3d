@@ -265,6 +265,35 @@ html, body {
   box-shadow: 0 3px 0 #2a6a00;
 }
 .speed-btn:active { transform: translateY(1px); }
+.settings-diff-btns {
+  display: flex; gap: 8px;
+}
+.diff-btn {
+  flex: 1;
+  font-family: inherit; font-weight: 900; font-size: 0.78rem;
+  padding: 10px 4px; border-radius: 10px;
+  border: 2px solid #446644;
+  background: rgba(255,255,255,0.08);
+  color: #aaccaa; cursor: pointer;
+  touch-action: manipulation;
+  transition: all 0.15s;
+}
+.diff-btn.active {
+  background: linear-gradient(180deg,#7dff4f,#4aaa00);
+  border-color: #4aff00; color: #1a3a0a;
+  box-shadow: 0 3px 0 #2a6a00;
+}
+.diff-btn:active { transform: translateY(1px); }
+#btn-exit-building {
+  position: fixed; bottom: 130px; right: 16px; z-index: 200;
+  font-family: inherit; font-weight: 900; font-size: 1rem;
+  padding: 12px 18px;
+  background: linear-gradient(180deg,#ff8844,#cc4400);
+  border: 3px solid #ff6622; border-radius: 12px;
+  color: #fff; cursor: pointer;
+  box-shadow: 0 4px 0 #882200;
+  touch-action: manipulation;
+}
 .settings-slider {
   width: 100%;
   -webkit-appearance: none;
