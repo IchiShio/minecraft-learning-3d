@@ -4,7 +4,8 @@
 const STORAGE_KEY = 'mclearn3d_v1';
 const STATS_KEY = 'mclearn3d_stats_v1';
 const SETTINGS_KEY = 'mclearn3d_settings_v1';
-const CUSTOM_Q_KEY = 'mclearn3d_custom_q_v1';
+const CUSTOM_Q_KEY  = 'mclearn3d_custom_q_v1';
+const DAILY_LOG_KEY = 'mclearn3d_daily_v1';
 const DEFAULT_SETTINGS = { speed: 1.0, bgmVol: 0.5, seVol: 0.7, difficulty: 'normal' };
 // レベルから現在の学年を返す (Lv1-2=2年生, Lv3-5=3年生, ...)
 const GRADE_FOR_LEVEL = lv => lv <= 2 ? 2 : lv <= 5 ? 3 : lv <= 9 ? 4 : lv <= 14 ? 5 : 6;
@@ -226,6 +227,7 @@ class Game {
     // 当日の回答集計（1日の終わりに自動難易度調整に使う）
     this.todayCorrect = 0;
     this.todayWrong   = 0;
+    this.todayLog     = {};  // subject -> {c, w} (当日の教科別集計)
     // questions.csv から読み込んだデータ（null = まだ未ロード）
     this.quizData = null;
   }
@@ -356,6 +358,42 @@ class Game {
     }
     this.todayCorrect = 0;
     this.todayWrong   = 0;
+    this.todayLog     = {};
+  }
+
+  // ===== DAILY LOG =====
+  loadDailyLog() {
+    try { return JSON.parse(localStorage.getItem(DAILY_LOG_KEY)) || {}; } catch(e) { return {}; }
+  }
+
+  saveDailyLog(log) {
+    try { localStorage.setItem(DAILY_LOG_KEY, JSON.stringify(log)); } catch(e) {}
+  }
+
+  // 当日のログを保存（毎回答後に呼ぶ）
+  _saveTodayLog() {
+    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    const allLogs = this.loadDailyLog();
+    allLogs[today] = {
+      correct: this.todayCorrect,
+      wrong: this.todayWrong,
+      subjects: JSON.parse(JSON.stringify(this.todayLog)),
+    };
+    // 30日より古いエントリを削除
+    const keys = Object.keys(allLogs).sort();
+    if (keys.length > 30) keys.slice(0, keys.length - 30).forEach(k => delete allLogs[k]);
+    this.saveDailyLog(allLogs);
+  }
+
+  // 起動時に当日の既存ログを復元（再起動しても当日分が引き継がれる）
+  _restoreTodayLog() {
+    const today = new Date().toISOString().slice(0, 10);
+    const allLogs = this.loadDailyLog();
+    if (allLogs[today]) {
+      this.todayCorrect = allLogs[today].correct || 0;
+      this.todayWrong   = allLogs[today].wrong   || 0;
+      this.todayLog     = allLogs[today].subjects || {};
+    }
   }
 
   _showToast(msg) {
@@ -1916,17 +1954,21 @@ class Game {
     this.playSe(ok ? 'correct' : 'wrong');
 
     const fb = document.getElementById('mining-feedback');
+    const subj = node.def.subject;
+    if (!this.todayLog[subj]) this.todayLog[subj] = { c: 0, w: 0 };
     if (ok) {
       this.state.totalCorrect++;
       this.state.currentStreak = (this.state.currentStreak || 0) + 1;
       if (this.state.currentStreak > this.state.maxStreak) this.state.maxStreak = this.state.currentStreak;
       this.todayCorrect++;
+      this.todayLog[subj].c++;
       this.addXP(XP_PER_CORRECT);
       fb.textContent = `✅ せいかい！ ${node.def.icon} ${node.def.name} ＋1こ！`;
       fb.className = 'mining-feedback correct';
     } else {
       this.state.currentStreak = 0;
       this.todayWrong++;
+      this.todayLog[subj].w++;
       const correctLabel = q.opts[q.correct];
       fb.textContent = `❌ ちがう！ 正解: ${correctLabel}。${q.explain || ''}`;
       fb.className = 'mining-feedback wrong';
@@ -1934,6 +1976,7 @@ class Game {
     fb.classList.remove('hidden');
     this.state.totalGames++;
     this.saveState();
+    this._saveTodayLog();
 
     setTimeout(() => {
       document.getElementById('mining-popup').classList.add('hidden');
@@ -2067,6 +2110,7 @@ addEventListener('load', () => {
     game.settings = game.loadSettings();
     game.state = game.loadState();
     await game.loadCustomQuestions();
+    game._restoreTodayLog();
 
     bar.style.width = '70%';
     txt.textContent = 'ワールドを生成中...';
