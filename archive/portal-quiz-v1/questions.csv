@@ -1,0 +1,27 @@
+# マイクラ学習クエスト3D - 問題ファイル
+# 列の説明:
+#   subject  : math（さんすう）/ japanese（こくご）/ english（えいご）
+#   grade    : 2〜6（学年）
+#   question : 問題文
+#   opt1〜opt4: 選択肢（opt3・opt4は省略可で2択になる）
+#   correct  : 正解の選択肢番号（0始まり。opt1=0, opt2=1, opt3=2, opt4=3）
+#   explain  : 解説文（省略可）
+#   diff     : easy / normal / hard（省略するとnormal）
+#
+# ※ この行（#で始まる行）はコメントとして無視されます
+# ※ CSVを編集したらGitHubにpushするとタブレットに自動反映されます
+subject,grade,question,opt1,opt2,opt3,opt4,correct,explain,diff
+math,2,2 ＋ 3 ＝ ？,4,5,6,7,1,たすと5になるよ！,easy
+math,2,10 ー 4 ＝ ？,5,6,7,8,1,10から4をひくと6だよ,easy
+math,2,3 × 4 ＝ ？,10,11,12,13,2,3を4かいたすと12だよ,normal
+math,2,5 × 6 ＝ ？,28,30,32,35,1,5×6＝30だよ,normal
+math,2,8 × 9 ＝ ？,62,63,72,81,2,8×9＝72だよ,hard
+math,2,100 ー 38 ＝ ？,52,60,62,68,2,100から38をひくと62だよ,hard
+japanese,2,「あめ」のよみかたは？,あめ,うめ,いめ,おめ,0,あめは雨のことだよ,easy
+japanese,2,「やま」のよみかたは？,やさ,やた,やま,やら,2,山はやまとよむよ,easy
+japanese,2,「きれい」のはんたいは？,ふるい,きたない,おおきい,ちいさい,1,きれいのはんたいはきたないだよ,normal
+japanese,2,「ひろい」のはんたいは？,せまい,ながい,みじかい,おもい,0,ひろいのはんたいはせまいだよ,normal
+english,2,犬は英語で？,cat,dog,bird,fish,1,犬はdogだよ,easy
+english,2,猫は英語で？,cat,dog,bird,fish,0,猫はcatだよ,easy
+english,2,赤は英語で？,blue,green,red,yellow,2,赤はredだよ,normal
+english,2,1・2・3を英語で？,one two three,a b c,red blue green,big small long,0,1はone 2はtwo 3はthreeだよ,normal
