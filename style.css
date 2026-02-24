@@ -338,30 +338,66 @@ html, body {
 /* ===== CONTROLS (mobile) ===== */
 #mobile-controls {
   position: fixed;
-  bottom: max(24px, env(safe-area-inset-bottom));
-  right: max(24px, env(safe-area-inset-right));
+  bottom: max(20px, env(safe-area-inset-bottom));
+  left: 0; right: 0;
   display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  padding: 0 max(20px, env(safe-area-inset-right)) 0 max(20px, env(safe-area-inset-left));
   pointer-events: none;
 }
 #mobile-controls.hidden { display: none; }
 
+/* D-pad */
+#dpad {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  pointer-events: all;
+}
+.dpad-row {
+  display: flex;
+  gap: 3px;
+  align-items: center;
+}
+.dpad-center {
+  width: 58px; height: 58px;
+}
+.dpad-btn {
+  width: 58px; height: 58px;
+  background: rgba(0,0,0,0.45);
+  border: 2px solid rgba(255,255,255,0.55);
+  border-radius: 10px;
+  font-size: 1.5rem;
+  color: rgba(255,255,255,0.92);
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 3px 0 rgba(0,0,0,0.4);
+}
+.dpad-btn:active { background: rgba(255,255,255,0.3); transform: scale(0.93); }
+
 #btn-interact {
   pointer-events: all;
-  width: 88px; height: 88px;
-  background: rgba(125,255,79,0.85);
+  width: 90px; height: 90px;
+  background: rgba(125,255,79,0.88);
   border: 3px solid #4aff00;
   border-radius: 50%;
   font-size: 1.1rem;
   font-weight: 900;
+  line-height: 1.25;
   cursor: pointer;
   color: #1a3a0a;
   display: flex; align-items: center; justify-content: center;
   text-align: center;
-  line-height: 1.2;
-  box-shadow: 0 4px 0 rgba(0,0,0,0.3);
+  box-shadow: 0 4px 0 rgba(0,0,0,0.35);
+  flex-direction: column;
 }
 #btn-interact.hidden { display: none; }
-#btn-interact:active { transform: scale(0.95); }
+#btn-interact:active { transform: scale(0.92); }
 
 /* ===== QUIZ MODAL ===== */
 #quiz-overlay {

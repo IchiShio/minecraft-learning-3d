@@ -1239,12 +1239,16 @@ class Game {
   }
 
   updateDayNight() {
-    const prev = this.dayTime;
-    this.dayTime = (this.dayTime + 1/DAY_LENGTH) % 1;
-    // 深夜を越えたら日数カウントアップ
-    if (prev > 0.95 && this.dayTime < 0.05) {
+    // 日本時間（JST = UTC+9）にリアルタイム同期
+    const now = new Date();
+    const jstSec = ((now.getUTCHours() + 9) % 24) * 3600
+                 + now.getUTCMinutes() * 60
+                 + now.getUTCSeconds();
+    const prevDayTime = this.dayTime;
+    this.dayTime = jstSec / 86400;
+    // 深夜0時を越えたら日数カウントアップ
+    if (prevDayTime > 0.95 && this.dayTime < 0.05) {
       this.dayCount++;
-      document.getElementById('hud-day').textContent = this.isNightTime() ? `🌙 ${this.dayCount}日目` : `☀️ ${this.dayCount}日目`;
     }
     const t = this.dayTime;
 
@@ -1357,34 +1361,36 @@ class Game {
     });
     addEventListener('keyup', e => { this.keys[e.key] = false; });
 
-    // Canvas swipe to move
+    // D-pad controls
     if (this.isMobile) {
-      const canvas = document.getElementById('game-canvas');
-      let swipeStartX = 0, swipeStartY = 0;
-      const SWIPE_R = 70;
-
-      canvas.addEventListener('touchstart', e => {
-        swipeStartX = e.touches[0].clientX;
-        swipeStartY = e.touches[0].clientY;
-        this.joystick.active = true;
-        this.joystick.x = 0; this.joystick.y = 0;
-      }, { passive: true });
-
-      canvas.addEventListener('touchmove', e => {
-        if (!this.joystick.active) return;
-        e.preventDefault();
-        const dx = e.touches[0].clientX - swipeStartX;
-        const dy = e.touches[0].clientY - swipeStartY;
-        this.joystick.x = Math.max(-1, Math.min(1, dx / SWIPE_R));
-        this.joystick.y = Math.max(-1, Math.min(1, dy / SWIPE_R));
-      }, { passive: false });
-
-      const stopSwipe = () => {
-        this.joystick.active = false;
-        this.joystick.x = 0; this.joystick.y = 0;
+      const dpadState = { up: false, down: false, left: false, right: false };
+      const syncDpad = () => {
+        let x = 0, z = 0;
+        if (dpadState.up)    z -= 1;
+        if (dpadState.down)  z += 1;
+        if (dpadState.left)  x -= 1;
+        if (dpadState.right) x += 1;
+        this.joystick.active = (x !== 0 || z !== 0);
+        this.joystick.x = x;
+        this.joystick.y = z;
       };
-      canvas.addEventListener('touchend', stopSwipe);
-      canvas.addEventListener('touchcancel', stopSwipe);
+      const dpadMap = { 'dpad-up': 'up', 'dpad-down': 'down', 'dpad-left': 'left', 'dpad-right': 'right' };
+      Object.entries(dpadMap).forEach(([id, dir]) => {
+        const btn = document.getElementById(id);
+        if (!btn) return;
+        btn.addEventListener('touchstart', e => {
+          e.preventDefault();
+          dpadState[dir] = true;
+          syncDpad();
+        }, { passive: false });
+        const release = e => {
+          if (e) e.preventDefault();
+          dpadState[dir] = false;
+          syncDpad();
+        };
+        btn.addEventListener('touchend',   release, { passive: false });
+        btn.addEventListener('touchcancel', release);
+      });
     }
 
     // Interact btn
@@ -1860,7 +1866,8 @@ class Game {
     if (this.isMobile) document.getElementById('mobile-controls').classList.remove('hidden');
     // モブ・昼夜リセット
     this.spawnMobs();
-    this.dayTime = 0.30; // 朝からスタート
+    // dayTimeはupdateDayNightでJSTから自動設定されるため初期化不要
+    this.dayTime = 0.5;
     this._wasNight = false;
     this.dayCount = 1;
     this.mobSpawnTimer = 0;
