@@ -45,6 +45,115 @@ Three.js製の3Dマイクラ風学習ゲーム。小学生（主に2年生〜6�
 - `RESOURCE_SPAWN`: 33箇所のスポーン位置
 - `buildResourceNodes()` → `startMining()` → `answerMining()` → `collectItem()` の流れ
 
+### 宝箱（Treasure Chests）
+- `TREASURE_SPAWNS`: 6箇所に宝箱を配置（math×2・japanese×2・english×2）
+- 宝箱に近づいて interact → 1問出題 → 正解でランダムアイテム（wood/stone/iron/gold）GET
+- 180秒後にリスポーン（枯渇中は非表示）
+- `📦` フローティングインジケーターが上下にアニメーション
+- `startTreasureQuiz(chest)` → `answerMining()` の isTreasure フラグで分岐
+
+### コンボストリークボーナス
+- `COMBO_MILESTONES = [3, 5, 7, 10]`、`COMBO_BONUS_XP = 8`
+- 連続正解数がマイルストーンに達すると `COMBO_BONUS_XP × streak` の追加XPを付与
+- 採掘（answerMining）・建物アクション（answerBuildingAction）両方で発動
+
+### 解済み問題のスキップとリテンション出題
+- **一度正解した問題は通常プールから除外**（`stat.correct > 0` の問題は `solvedPool` へ）
+- 通常プールが空になった場合のみ `generateRetentionVariant(q)` でバリアントを生成
+  - `truefalse` 型: 数値を微妙にずらして「かくにん」問題として出題
+  - 選択肢型: 正解を保持したまま選択肢順をシャッフルして出題
+  - バリアントIDは `ret_{元ID}` 形式で、`updateQuestionStat()` を呼ばない
+- `STATS_KEY`（`mclearn3d_stats_v1`）が判定の根拠。ニューゲーム後も引き継がれる
+  - 全問リセットしたい場合は `localStorage.removeItem('mclearn3d_stats_v1')`
+
+### HP・ダメージシステム
+- `this.playerHp = 6 / this.playerMaxHp = 6`（ハート6個）
+- HUD 左上にハートアイコン（❤️/🖤）を常時表示（`_updateHpHud()`）
+- `hurtPlayer(dmg)`:
+  - `invincibleTimer > 0` の間は無敵（ダメージ無効）
+  - ダメージ時: 赤フラッシュ・プレイヤー点滅・`playSe('hurt')`
+  - `invincibleTimer = 80`（約1.3秒）
+- HP0 → `_playerDeath()`: ゲームオーバー画面表示・BGM停止
+- `_respawn()`: HP全回復・中心(0,0)にテレポート・`invincibleTimer=180`
+- 自然回復: 600フレーム（10秒）ごとに1HP回復
+- **建物内は全攻撃無効**（`!this.insideBuilding` チェック）
+- **温泉（onsen）で問題正解 → HP全回復**
+
+### モブ（敵・動物）システム
+
+#### モブ種別（MOB_TYPES）
+| ID | 特性 | 攻撃方法 | 昼間 |
+|----|------|---------|------|
+| zombie | 敵対・追跡 | 接近メレー（-1HP、60f CD） | 燃焼→消滅 |
+| skeleton | 敵対・後退型 | 矢を発射（-1HP、90f CD） | 燃焼→消滅 |
+| creeper | 敵対・チャージ | 爆発（-3HP＋ノックバック） | 消えない |
+| ghast | 敵対・浮遊 | 火の玉（-2HP） | 消えない |
+| pig / sheep / chicken | 受動 | なし（プレイヤー接近で逃走） | 昼のみスポーン |
+
+#### モブAIの流れ
+- 夜: zombie(40%) / skeleton(30%) / creeper(30%) をスポーン、Lv3以上でghast出現
+- 昼: pig / sheep / chicken をスポーン
+- `MOB_CAP_HOSTILE = 12`、`MOB_CAP_PASSIVE = 10`
+- ゾンビ/スケルトンは昼間`burnDay=true`→180フレーム後に地中へ沈んで消滅
+- スケルトン: `rangedAttack:true`、距離3〜14uで矢を発射（`spawnArrow(mob)`）
+  - 矢は `fireballs[]` 配列を再利用、`isArrow:true` フラグで区別
+- ガスト: 高度9±1.8で浮遊、距離20以内で火の玉（`spawnFireball(mob)`、160fCD）
+- クリーパー: 距離3.2以内で90fチャージ→`triggerExplosion()`
+
+### 衝突判定
+- **ワールド境界**: `Math.max/Math.min` でプレイヤー座標をクランプ（初期±28）
+- **建物AABB衝突**: `movePlayer()` 内で `BUILDING_DEFS` 全17棟をAABBチェック
+  - 建物内に入ると外側に押し出し（margin 0.25u）
+  - 衝突しても建物への入場は妨げない（`tryInteract()` で入場判定は別途）
+- **建物内**: 195〜205 の矩形範囲にクランプ
+
+### ワールド自動拡張（World Expansion）
+- `WORLD_ZONES`: 4ゾーン定義（zone2〜zone5）
+- 初期状態: bounds=28、fog=0.016
+- ゾーン解放条件:
+  - zone2（むらのはずれ）: totalItems≥5, **bounds=33**（フェンス位置と一致）, fog=0.012
+  - zone3（もりのおく）: totalItems≥20, bounds=46, fog=0.009
+  - zone4（さいはての ち）: totalItems≥45 or Lv≥10, bounds=58, fog=0.005
+  - zone5（でんせつのせかい）: totalItems≥80 or Lv≥15, bounds=70, fog=0.003
+- zone2のフェンスポストはz=±33, x=±33に配置 → bounds=33と一致させることで柵が実際の壁になる
+- `applyWorldZones()`: ゲーム起動時に保存済みゾーンを復元（トーストなし）
+- `checkWorldExpansion()`: `collectItem()` と `addXP()` のレベルアップ時に呼ばれ、新ゾーンをチェック
+- `expandWorld(zone)`: bounds/fog更新・デコレーション追加・トースト表示・saveState
+- `_buildZoneDecorations(zoneId)`: ゾーンごとのThree.jsオブジェクト生成（花畑・フェンス/キノコ・岩/遺跡・モノリス/クリスタル・浮遊岩）
+- `_clearZoneDecorations()`: リセット時にシーンからデコレーション削除
+
+### 建物インテリア（_buildInterior）
+- `enterBuilding` が共通の床/壁/天井/壁たいまつを生成後、`_buildInterior(def, g)` を呼ぶ
+- 建物IDごとに完全に異なる内装を持つ（17棟すべて専用）
+  - cabin: ベッド・クラフト台・かまど・チェスト・窓
+  - tanbo: 干し草・水桶・農具・麦袋・水槽
+  - mine: 鉱石展示ブロック・ツルハシ・トロッコ・レール・チェスト
+  - market: カウンター・棚・樽・商品・看板
+  - well: 石の囲い・水面・縄・バケツ
+  - onsen: 湯船・湯気・岩の椅子・竹・タオル・ランタン（正解でHP全回復）
+  - forge: かまど×2・アンビル・剣・盾・石炭
+  - shrine: 鳥居・賽銭箱・お祈りマット・注連縄・ランタン
+  - guild: 掲示板・武器掛け・テーブル・トロフィー・バナー
+  - garden: 植木鉢×多数・棚・ベンチ・じょうろ・土
+  - tower: ハシゴ・窓・望遠鏡・地図テーブル・チェスト
+  - library: 本棚×多段×多列・書見台・読書テーブル・ろうそく
+  - port: 樽×多数・錨・魚・漁網・縄コイル
+  - castle: 玉座・柱×4・バナー×4・チェスト×3・金装飾
+  - dragon: 宝の山・溶岩池・ドラゴンの頭蓋骨・骨
+  - sky: 雲ブロック・クリスタルの柱・祭壇・浮かぶ宝石
+  - rainbow: 虹色の柱・虹アーチ・エンドポータル・星
+- `bm(w,h,d,col,x,y,z)` ショートハンドで全家具を `this.box()` + `g.add()` で配置
+- `pl(col,intensity,dist,x,y,z)` ショートハンドでPointLightを追加
+- 床色・天井色も建物ごとに変更（floorCols / ceilCols マップ）
+- 壁たいまつは4本（前後壁×各2）、torch用PointLight付き
+
+### 建物内アクションボタン（btn-building-action）
+- `#btn-building-action`: `#mobile-controls` の外に常時 DOM 存在（PC・モバイル共通）
+- `checkNearbyInterior()`: アクションスポット（距離<2.5）に近づくとボタンテキストを「🛌 ねる」等に設定して表示
+- クールダウン中はヒントテキストのみ（残り秒数表示）、ボタン非表示
+- キャンバスタップ（`_handleTap()`）も建物内では `nearBuildingAction` があれば `tryInteract()` を呼ぶ
+- `exitBuilding()` / `enterBuilding()` でボタンを hidden にリセット
+
 ### CSV 問題読み込み
 - 起動時に `fetch('./questions.csv', { cache: 'no-cache' })` でロード
 - 成功したら `localStorage(CUSTOM_Q_KEY)` にキャッシュ → オフライン時のフォールバック
@@ -73,54 +182,13 @@ Three.js製の3Dマイクラ風学習ゲーム。小学生（主に2年生〜6�
 
 ### モバイル操作（Dパッド＋タップ移動）
 - スワイプ方式は廃止済み
-- 画面左下に**Dパッド（▲▼◀▶ボタン）**、右下に「👆 はいる」ボタン
+- 画面左下に**Dパッド（▲▼◀▶ボタン）**、右下に「👆 はいる」ボタン（モバイルのみ表示）
 - `dpadState { up/down/left/right }` で押下状態管理
 - `this.joystick { active, x, y }` に変換してPC操作と共通処理
 - マルチタッチ（2方向同時押し）で斜め移動対応
 - `this.isMobile = navigator.maxTouchPoints > 0` でタッチデバイス判定
   - **注意**: `(hover: hover) and (pointer: fine)` のCSS media queryはiPadでも一致する場合があるので使わない
   - **注意**: `ontouchstart` や `window.innerWidth < 900` は信頼性が低い
-
-### 建物インテリア（_buildInterior）
-- `enterBuilding` が共通の床/壁/天井/壁たいまつを生成後、`_buildInterior(def, g)` を呼ぶ
-- 建物IDごとに完全に異なる内装を持つ（17棟すべて専用）
-  - cabin: ベッド・クラフト台・かまど・チェスト・窓
-  - tanbo: 干し草・水桶・農具・麦袋・水槽
-  - mine: 鉱石展示ブロック・ツルハシ・トロッコ・レール・チェスト
-  - market: カウンター・棚・樽・商品・看板
-  - well: 石の囲い・水面・縄・バケツ
-  - onsen: 湯船・湯気・岩の椅子・竹・タオル・ランタン
-  - forge: かまど×2・アンビル・剣・盾・石炭
-  - shrine: 鳥居・賽銭箱・お祈りマット・注連縄・ランタン
-  - guild: 掲示板・武器掛け・テーブル・トロフィー・バナー
-  - garden: 植木鉢×多数・棚・ベンチ・じょうろ・土
-  - tower: ハシゴ・窓・望遠鏡・地図テーブル・チェスト
-  - library: 本棚×多段×多列・書見台・読書テーブル・ろうそく
-  - port: 樽×多数・錨・魚・漁網・縄コイル
-  - castle: 玉座・柱×4・バナー×4・チェスト×3・金装飾
-  - dragon: 宝の山・溶岩池・ドラゴンの頭蓋骨・骨
-  - sky: 雲ブロック・クリスタルの柱・祭壇・浮かぶ宝石
-  - rainbow: 虹色の柱・虹アーチ・エンドポータル・星
-- `bm(w,h,d,col,x,y,z)` ショートハンドで全家具を `this.box()` + `g.add()` で配置
-- `pl(col,intensity,dist,x,y,z)` ショートハンドでPointLightを追加
-- 床色・天井色も建物ごとに変更（floorCols / ceilCols マップ）
-- 壁たいまつは4本（前後壁×各2）、torch用PointLight付き
-
-### ワールド自動拡張（World Expansion）
-- `WORLD_ZONES`: 4ゾーン定義（zone2〜zone5）、各ゾーンに解放条件・境界・霧密度・トーストメッセージ
-- 初期状態: bounds=28（全リソース・レインボー以外の建物を網羅）、fog=0.016
-- ゾーン解放条件:
-  - zone2（むらのはずれ）: totalItems≥5, bounds=36, fog=0.012
-  - zone3（もりのおく）: totalItems≥20, bounds=46, fog=0.009
-  - zone4（さいはての ち）: totalItems≥45 or Lv≥10, bounds=58, fog=0.005
-  - zone5（でんせつのせかい）: totalItems≥80 or Lv≥15, bounds=70, fog=0.003
-- `applyWorldZones()`: ゲーム起動時に保存済みゾーンを復元（トーストなし）
-- `checkWorldExpansion()`: `collectItem()` と `addXP()` のレベルアップ時に呼ばれ、新ゾーンをチェック
-- `expandWorld(zone)`: bounds/fog更新・デコレーション追加・トースト表示・saveState
-- `_buildZoneDecorations(zoneId)`: ゾーンごとのThree.jsオブジェクト生成（花畑・フェンス/キノコ・岩/遺跡・モノリス/クリスタル・浮遊岩）
-- `_clearZoneDecorations()`: リセット時にシーンからデコレーション削除
-- `this.zoneDecorMeshes`: ゾーンIDキーのMeshリスト（PointLightも含む）
-- レインボーゲート（z=30）はzone2解放まで境界外になる（Lv15必要なので問題なし）
 
 ### カーソルフォロー（cursor follow）
 - マウスをホバーするだけで**カメラと体がカーソル方向を向く**（PCデフォルト動作）
@@ -138,27 +206,19 @@ Three.js製の3Dマイクラ風学習ゲーム。小学生（主に2年生〜6�
 - `_handleTap(clientX, clientY)` でRaycast処理:
   1. Three.js Raycasterで地面平面（y=0）に光線を当てて世界座標を取得
   2. **リソースブロック**が6ユニット以内 → そこへ移動して自動インタラクト
-  3. **建物**が10ユニット以内 → そこへ移動（解放済みなら自動でインタラクト）
-  4. それ以外 → タップした地面座標へ移動
+  3. **宝箱**が6ユニット以内 → そこへスナップ移動
+  4. **建物**が10ユニット以内 → そこへ移動（解放済みなら自動でインタラクト）
+  5. それ以外 → タップした地面座標へ移動
+  6. **建物内タップ**: `nearBuildingAction` があれば即 `tryInteract()`
 - `movePlayer()` でmoveTargetがあればDパッド/キーボードと共通の加速系で移動
   - 1.8ユニット以内に到達 → moveTargetクリア＆インタラクト実行
   - Dパッド/キーボード入力があれば即キャンセル（手動操作優先）
 - タッチの判定: touchstart〜touchendの移動量 < 12px をタップとみなす（カメラドラッグと区別）
 - マウスの判定: `click` イベントを使用（ドラッグ時はブラウザが発火しない）
 
-### 解済み問題のアイテム制限
-- **一度正解した問題は再度正解してもアイテムを獲得できない**
-- 判定: `startMining()` で `playerStats[q.id].correct > 0` を確認 → `alreadySolved` フラグを `this.mining` に保持
-- 解済み問題を出題された場合: タイトルに「（もう といた！アイテムなし）」を表示
-- 正解時の挙動:
-  - `alreadySolved = false` → 通常通り `collectItem()` でアイテム＋ブロック枯渇
-  - `alreadySolved = true` → XPのみ付与・`collectItem()` は呼ばない・ブロックは枯渇・📚フローティング表示
-- `STATS_KEY`（`mclearn3d_stats_v1`）が判定の根拠。ニューゲーム後も引き継がれる
-  - 全問リセットしたい場合は `localStorage.removeItem('mclearn3d_stats_v1')`
-- 算数の動的生成問題も ID（`gen_add2_0` 等）で追跡されるため同様に制限される
-
 ### BGM・SE（Web Audio API）
 - BGM: field / night / quiz の3曲（プロシージャル）
+- SE: correct / wrong / levelup / unlock / portal / start / **hurt / death**
 - `NOTE_FREQ()`: C4=261.63Hz を基準に音程計算（440Hzベースは間違い）
 - `AudioContext` は suspended 状態になるため、`_scheduleBgm()` 内で `ac.resume().then(doSchedule)` でリカバリ
 - 昼夜切り替えで自動的に field ↔ night BGMが切り替わる
