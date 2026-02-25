@@ -160,6 +160,7 @@
     <div class="settings-section">
       <div class="settings-label">📊 がくしゅうきろく</div>
       <button class="settings-export-btn" id="btn-export-stats">📥 エクスポート</button>
+      <button class="settings-export-btn" id="btn-review-stats" style="margin-top:6px">📋 もんだいをみる</button>
     </div>
     <div class="settings-section">
       <div class="settings-label">☁️ クラウド同期 <span style="font-size:.7rem;color:#aaa">（管理者が設定）</span></div>
@@ -181,6 +182,38 @@
   <div class="death-inner">
     <div class="death-msg">💀 やられた！</div>
     <button id="btn-respawn">♻️ もう一度！</button>
+  </div>
+</div>
+
+<!-- CSV Update Popup -->
+<div id="update-popup" class="hidden">
+  <div class="update-inner">
+    <div class="update-icon">📚✨</div>
+    <div class="update-msg">あたらしい もんだいが<br>とどいたよ！</div>
+    <div class="update-sub">ボタンを おしてね！</div>
+    <button id="btn-update-ok">🔄 くるくる！</button>
+  </div>
+</div>
+
+<!-- Question Review Panel -->
+<div id="review-panel" class="hidden">
+  <div class="review-inner">
+    <div class="review-header">
+      <span class="review-title">📋 もんだいリスト</span>
+      <button id="btn-review-close">✕ とじる</button>
+    </div>
+    <div class="review-filters">
+      <button class="rv-filter active" data-subj="all">全部</button>
+      <button class="rv-filter" data-subj="math">さんすう</button>
+      <button class="rv-filter" data-subj="japanese">こくご</button>
+      <button class="rv-filter" data-subj="english">えいご</button>
+    </div>
+    <div class="review-counter" id="review-counter"></div>
+    <div class="review-card" id="review-card"></div>
+    <div class="review-nav">
+      <button id="btn-rv-prev">◀ まえ</button>
+      <button id="btn-rv-next">つぎ ▶</button>
+    </div>
   </div>
 </div>
 

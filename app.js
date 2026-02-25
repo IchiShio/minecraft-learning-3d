@@ -355,6 +355,11 @@ class Game {
         const text = await res.text();
         rows = this.parseCSV(text);
         localStorage.setItem(CUSTOM_Q_KEY, JSON.stringify(rows));
+        // フィンガープリントで更新検知
+        const fp = text.length + '|' + text.slice(0, 300);
+        const prevFp = localStorage.getItem('mclearn3d_csv_fp');
+        if (prevFp && prevFp !== fp) this.csvUpdated = true;
+        localStorage.setItem('mclearn3d_csv_fp', fp);
       }
     } catch(e) {}
     if (!rows) {
@@ -780,6 +785,60 @@ class Game {
         el.textContent = 'まだ同期していません';
       }
     } catch(e) { el.textContent = 'まだ同期していません'; }
+  }
+
+  // ===== QUESTION REVIEW =====
+  openReviewPanel() {
+    this._reviewSubj = 'all';
+    this._reviewIdx = 0;
+    this._buildReviewList();
+    this._renderReviewCard();
+    document.getElementById('review-panel').classList.remove('hidden');
+  }
+
+  _buildReviewList() {
+    this._reviewList = [];
+    const subjects = this._reviewSubj === 'all' ? ['math','japanese','english'] : [this._reviewSubj];
+    subjects.forEach(subj => {
+      const grades = this.quizData?.[subj]?.grades || {};
+      Object.entries(grades).forEach(([grade, qs]) => {
+        qs.forEach(q => this._reviewList.push({ q, subj, grade: parseInt(grade) }));
+      });
+    });
+    this._reviewIdx = 0;
+  }
+
+  _renderReviewCard() {
+    const counter = document.getElementById('review-counter');
+    const card = document.getElementById('review-card');
+    const total = this._reviewList.length;
+    if (!total) {
+      counter.textContent = '0 問';
+      card.innerHTML = '<div class="rv-q" style="color:#888">もんだいがありません</div>';
+      document.getElementById('btn-rv-prev').disabled = true;
+      document.getElementById('btn-rv-next').disabled = true;
+      return;
+    }
+    const idx = this._reviewIdx;
+    counter.textContent = `${idx + 1} / ${total}`;
+    const { q, subj, grade } = this._reviewList[idx];
+    const stat = this.playerStats[q.id] || { seen:0, correct:0, wrong:0 };
+    const subjLabel = { math:'さんすう', japanese:'こくご', english:'えいご' }[subj] || subj;
+    const diffLabel = { easy:'かんたん', normal:'ふつう', hard:'むずかしい' }[q.diff || 'normal'];
+    const statsHtml = stat.seen === 0
+      ? '<div class="rv-unseen">まだ といていない</div>'
+      : `<div class="rv-stats"><span class="rv-stat-ok">✅ ${stat.correct}かい せいかい</span><span class="rv-stat-ng">❌ ${stat.wrong}かい まちがい</span></div>`;
+    card.innerHTML = `
+      <div class="rv-meta">
+        <span class="rv-badge">${subjLabel}</span>
+        <span class="rv-badge">${grade}ねんせい</span>
+        <span class="rv-badge">${diffLabel}</span>
+      </div>
+      <div class="rv-q">${q.q}</div>
+      ${statsHtml}
+    `;
+    document.getElementById('btn-rv-prev').disabled = idx === 0;
+    document.getElementById('btn-rv-next').disabled = idx === total - 1;
   }
 
   // ===== AUDIO =====
@@ -3549,6 +3608,9 @@ addEventListener('load', () => {
       setTimeout(() => {
         document.getElementById('loading-screen').classList.add('hidden');
         document.getElementById('title-screen').classList.remove('hidden');
+        if (game.csvUpdated) {
+          setTimeout(() => document.getElementById('update-popup').classList.remove('hidden'), 400);
+        }
         if (game._setupToastPending) {
           game._setupToastPending = false;
           setTimeout(() => game._showToast('☁️ クラウド同期の設定が完了しました！\n問題を解くと自動で同期されます'), 800);
@@ -3616,6 +3678,36 @@ addEventListener('load', () => {
         // リスポーンボタン
         document.getElementById('btn-respawn').addEventListener('click', () => {
           game._respawn();
+        });
+
+        // CSV更新ポップアップ
+        document.getElementById('btn-update-ok').addEventListener('click', () => {
+          document.getElementById('update-popup').classList.add('hidden');
+          game._showToast('📚 あたらしいもんだい、はじめよう！');
+        });
+
+        // もんだいレビューパネル
+        document.getElementById('btn-review-stats').addEventListener('click', () => {
+          game.closeSettings();
+          game.openReviewPanel();
+        });
+        document.getElementById('btn-review-close').addEventListener('click', () => {
+          document.getElementById('review-panel').classList.add('hidden');
+        });
+        document.querySelectorAll('.rv-filter').forEach(btn => {
+          btn.addEventListener('click', () => {
+            document.querySelectorAll('.rv-filter').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            game._reviewSubj = btn.dataset.subj;
+            game._buildReviewList();
+            game._renderReviewCard();
+          });
+        });
+        document.getElementById('btn-rv-prev').addEventListener('click', () => {
+          if (game._reviewIdx > 0) { game._reviewIdx--; game._renderReviewCard(); }
+        });
+        document.getElementById('btn-rv-next').addEventListener('click', () => {
+          if (game._reviewIdx < (game._reviewList || []).length - 1) { game._reviewIdx++; game._renderReviewCard(); }
         });
 
         // BGM音量スライダー
