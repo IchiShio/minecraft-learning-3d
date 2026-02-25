@@ -2183,7 +2183,7 @@ class Game {
     const dist = Math.hypot(px - act.pos[0], pz - act.pos[1]);
 
     const hint = document.getElementById('interact-hint');
-    const btnI = document.getElementById('btn-interact');
+    const btnA = document.getElementById('btn-building-action');
 
     if (dist < 2.5) {
       this.nearBuildingAction = { def: this.currentBuildingDef, act };
@@ -2193,16 +2193,17 @@ class Game {
         const remaining = Math.ceil((cd - now) / 1000);
         hint.textContent = `${act.icon} ${act.label}：あと ${remaining}びょう`;
         hint.classList.remove('hidden');
-        btnI.classList.add('hidden');
+        btnA.classList.add('hidden');
       } else {
-        hint.textContent = `${act.icon} ${act.label}：E / タップ！`;
+        hint.textContent = `${act.icon} ${act.label}：E`;
         hint.classList.remove('hidden');
-        btnI.classList.remove('hidden');
+        btnA.textContent = `${act.icon} ${act.label}`;
+        btnA.classList.remove('hidden');
       }
     } else {
       this.nearBuildingAction = null;
       hint.classList.add('hidden');
-      btnI.classList.add('hidden');
+      btnA.classList.add('hidden');
     }
   }
 
@@ -2242,7 +2243,10 @@ class Game {
   }
 
   _handleTap(clientX, clientY) {
-    if (this.insideBuilding) return;
+    if (this.insideBuilding) {
+      if (this.nearBuildingAction) this.tryInteract();
+      return;
+    }
     if (!document.getElementById('mining-popup').classList.contains('hidden')) return;
 
     // Raycast onto the ground plane (y=0)
@@ -2880,6 +2884,7 @@ class Game {
     document.getElementById('btn-exit-building').classList.add('hidden');
     document.getElementById('interact-hint').classList.add('hidden');
     document.getElementById('btn-interact').classList.add('hidden');
+    document.getElementById('btn-building-action').classList.add('hidden');
   }
 
   // ===== RESOURCE MINING =====
@@ -3478,6 +3483,11 @@ addEventListener('load', () => {
         // 建物から出るボタン
         document.getElementById('btn-exit-building').addEventListener('click', () => {
           game.exitBuilding();
+        });
+
+        // 建物内アクションボタン（タップ用）
+        document.getElementById('btn-building-action').addEventListener('click', () => {
+          game.tryInteract();
         });
 
         // BGM音量スライダー

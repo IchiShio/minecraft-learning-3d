@@ -362,6 +362,23 @@ html, body {
 .wc-stars.normal { color: #aaaaaa; }
 .wc-stars.strong { color: #ffd700; }
 
+/* ===== BUILDING ACTION BUTTON ===== */
+#btn-building-action {
+  position: fixed;
+  bottom: max(80px, calc(30px + env(safe-area-inset-bottom)));
+  left: 50%; transform: translateX(-50%);
+  z-index: 200;
+  font-family: inherit; font-weight: 900; font-size: 1.1rem;
+  padding: 14px 32px;
+  background: linear-gradient(180deg,#88ff44,#44aa00);
+  border: 3px solid #4aff00; border-radius: 12px;
+  color: #fff;
+  box-shadow: 0 4px 0 #2a6a00;
+  cursor: pointer; white-space: nowrap;
+}
+#btn-building-action.hidden { display: none; }
+#btn-building-action:active { transform: translateX(-50%) translateY(2px); box-shadow: 0 2px 0 #2a6a00; }
+
 /* ===== INTERACT HINT ===== */
 #interact-hint {
   position: fixed;
