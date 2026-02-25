@@ -21,6 +21,7 @@ const DEFAULT_STATE = {
   achievements: [],
   adaptiveBias: 0,   // -2〜+2: 自動難易度オフセット（毎日更新）
   unlockedZones: [], // ワールド拡張ゾーン
+  buildingActionCooldown: {}, // 建物アクションのクールダウン { buildingId: timestamp }
 };
 
 const inv = s => s.inventory || {};
@@ -91,6 +92,28 @@ const WORLD_ZONES = [
     toast:'🌈 でんせつのせかいが かいほう！\nすべての ちへいを たんけんせよ！',
     cond:(s,it)=>it>=80||s.level>=15 },
 ];
+
+// ===== BUILDING ACTION DEFINITIONS =====
+// 各建物で1回できるアクション（問題を解くと実行できる）
+const BUILDING_ACTIONS = {
+  cabin:   { icon:'🛌', label:'ねる',          pos:[-3,-2], subj:'math',     reward:{ xp:20 },             cooldown:120000 },
+  tanbo:   { icon:'🌾', label:'しゅうかくする', pos:[-3,-3], subj:'japanese', reward:{ xp:15, item:'wood' },  cooldown:90000  },
+  mine:    { icon:'⛏️', label:'ほる',           pos:[0,-3],  subj:'math',     reward:{ xp:15, item:'stone'}, cooldown:90000  },
+  market:  { icon:'🤝', label:'こうえきする',   pos:[0,0],   subj:'english',  reward:{ xp:20 },             cooldown:120000 },
+  well:    { icon:'💧', label:'みずくむ',        pos:[0,0],   subj:'japanese', reward:{ xp:15 },             cooldown:60000  },
+  onsen:   { icon:'♨️', label:'にゅうよくする', pos:[0,0],   subj:'math',     reward:{ xp:25 },             cooldown:180000 },
+  forge:   { icon:'🔨', label:'うちきをする',   pos:[0,-1],  subj:'math',     reward:{ xp:20, item:'iron' }, cooldown:120000 },
+  shrine:  { icon:'🙏', label:'おまいりする',   pos:[0,-3],  subj:'japanese', reward:{ xp:20 },             cooldown:120000 },
+  guild:   { icon:'📋', label:'いらいをうける', pos:[0,-2],  subj:'english',  reward:{ xp:25 },             cooldown:120000 },
+  garden:  { icon:'🪴', label:'みずやりする',   pos:[0,2],   subj:'japanese', reward:{ xp:15 },             cooldown:60000  },
+  tower:   { icon:'🔭', label:'かんさつする',   pos:[-3,-2], subj:'math',     reward:{ xp:20 },             cooldown:120000 },
+  library: { icon:'📖', label:'どくしょする',   pos:[-3,2],  subj:'japanese', reward:{ xp:25 },             cooldown:120000 },
+  port:    { icon:'🎣', label:'つりをする',     pos:[-2,-1], subj:'math',     reward:{ xp:15 },             cooldown:60000  },
+  castle:  { icon:'👑', label:'たいざする',     pos:[0,-4],  subj:'english',  reward:{ xp:30 },             cooldown:180000 },
+  dragon:  { icon:'💰', label:'たからをとる',   pos:[-3,-3], subj:'math',     reward:{ xp:35, item:'gold' }, cooldown:300000 },
+  sky:     { icon:'✨', label:'こうだんする',   pos:[0,-3],  subj:'english',  reward:{ xp:30 },             cooldown:180000 },
+  rainbow: { icon:'🌈', label:'とびこむ',       pos:[0,2],   subj:'english',  reward:{ xp:40, item:'diamond'}, cooldown:600000 },
+};
 
 // ===== CHARACTER DEFINITIONS =====
 const CHARACTER_DEFS = [
@@ -244,6 +267,10 @@ class Game {
     this.insideBuilding = false;
     this.interiorGroup = null;
     this.prevPlayerPos = null;
+    this.currentBuildingDef = null;
+    this.nearBuildingAction = null;
+    this.currentBuildingAction = null;
+    this.actionIndicatorMesh = null;
     this.lookState = { up: false, down: false };
     // 当日の回答集計（1日の終わりに自動難易度調整に使う）
     this.todayCorrect = 0;
@@ -548,6 +575,7 @@ class Game {
           ...saved,
           inventory: { ...DEFAULT_STATE.inventory, ...(saved.inventory || {}) },
           unlockedZones: Array.isArray(saved.unlockedZones) ? saved.unlockedZones : [],
+          buildingActionCooldown: saved.buildingActionCooldown || {},
         };
       }
     } catch(e) {}
@@ -1779,6 +1807,12 @@ class Game {
     this.updateMobs();
     this.mobSpawnTick();
     this.checkNearby();
+    this.checkNearbyInterior();
+    // Animate building action indicator
+    if (this.actionIndicatorMesh) {
+      this.actionIndicatorMesh.position.y = 1.5 + Math.sin(this.frame * 0.06) * 0.18;
+      this.actionIndicatorMesh.rotation.y += 0.04;
+    }
     // Respawn depleted resource nodes
     const now = Date.now();
     this.resourceNodes.forEach(node => {
@@ -1791,7 +1825,8 @@ class Game {
   }
 
   movePlayer() {
-    const miningOpen = !document.getElementById('mining-popup').classList.contains('hidden');
+    const miningOpen = !document.getElementById('mining-popup').classList.contains('hidden')
+      || !document.getElementById('building-action-popup').classList.contains('hidden');
     if (miningOpen) { this.vx *= 0.7; this.vz *= 0.7; return; }
 
     let dx = 0, dz = 0;
@@ -1951,9 +1986,50 @@ class Game {
     }
   }
 
+  checkNearbyInterior() {
+    if (!this.insideBuilding || !this.currentBuildingDef) return;
+    const act = BUILDING_ACTIONS[this.currentBuildingDef.id];
+    if (!act) return;
+
+    // Player local position relative to interior origin (200,0,200)
+    const px = this.player.position.x - 200;
+    const pz = this.player.position.z - 200;
+    const dist = Math.hypot(px - act.pos[0], pz - act.pos[1]);
+
+    const hint = document.getElementById('interact-hint');
+    const btnI = document.getElementById('btn-interact');
+
+    if (dist < 2.5) {
+      this.nearBuildingAction = { def: this.currentBuildingDef, act };
+      const now = Date.now();
+      const cd = (this.state.buildingActionCooldown || {})[this.currentBuildingDef.id];
+      if (cd && now < cd) {
+        const remaining = Math.ceil((cd - now) / 1000);
+        hint.textContent = `${act.icon} ${act.label}：あと ${remaining}びょう`;
+        hint.classList.remove('hidden');
+        btnI.classList.add('hidden');
+      } else {
+        hint.textContent = `${act.icon} ${act.label}：E / タップ！`;
+        hint.classList.remove('hidden');
+        btnI.classList.remove('hidden');
+      }
+    } else {
+      this.nearBuildingAction = null;
+      hint.classList.add('hidden');
+      btnI.classList.add('hidden');
+    }
+  }
+
   // ===== INTERACT =====
   tryInteract() {
-    if (this.insideBuilding) { this.exitBuilding(); return; }
+    if (this.insideBuilding) {
+      if (this.nearBuildingAction) {
+        this.startBuildingAction(this.nearBuildingAction.def, this.nearBuildingAction.act);
+      } else {
+        this.exitBuilding();
+      }
+      return;
+    }
     if (this.nearResource && !this.mining) {
       this.startMining(this.nearResource);
     } else if (this.nearBuilding && this.nearBuilding.cond(this.state)) {
@@ -2091,6 +2167,19 @@ class Game {
     this.interiorGroup = g;
     this.player.position.set(ix, 1, iz+2);
     this.vx = 0; this.vz = 0;
+    this.currentBuildingDef = def;
+
+    // Action indicator: glowing cube at action zone
+    const act = BUILDING_ACTIONS[def.id];
+    if (act) {
+      const indGeo = new THREE.BoxGeometry(0.45, 0.45, 0.45);
+      const indMat = new THREE.MeshLambertMaterial({ color: 0xFFFF00, emissive: 0xFFAA00, emissiveIntensity: 0.9 });
+      const ind = new THREE.Mesh(indGeo, indMat);
+      ind.position.set(ix + act.pos[0], 1.5, iz + act.pos[1]);
+      this.scene.add(ind);
+      this.actionIndicatorMesh = ind;
+    }
+
     document.getElementById('btn-exit-building').classList.remove('hidden');
     document.getElementById('interact-hint').classList.add('hidden');
     document.getElementById('building-popup').classList.add('hidden');
@@ -2574,13 +2663,23 @@ class Game {
       });
       this.interiorGroup = null;
     }
+    if (this.actionIndicatorMesh) {
+      this.scene.remove(this.actionIndicatorMesh);
+      this.actionIndicatorMesh.geometry.dispose();
+      this.actionIndicatorMesh.material.dispose();
+      this.actionIndicatorMesh = null;
+    }
     if (this.prevPlayerPos) {
       this.player.position.copy(this.prevPlayerPos);
       this.prevPlayerPos = null;
     }
     this.vx = 0; this.vz = 0;
     this.insideBuilding = false;
+    this.currentBuildingDef = null;
+    this.nearBuildingAction = null;
     document.getElementById('btn-exit-building').classList.add('hidden');
+    document.getElementById('interact-hint').classList.add('hidden');
+    document.getElementById('btn-interact').classList.add('hidden');
   }
 
   // ===== RESOURCE MINING =====
@@ -2715,6 +2814,103 @@ class Game {
       el.style.opacity = '0';
     });
     setTimeout(() => el.remove(), 1300);
+  }
+
+  // ===== BUILDING ACTIONS =====
+  startBuildingAction(def, act) {
+    if (!def || !act) return;
+    const now = Date.now();
+    const cd = (this.state.buildingActionCooldown || {})[def.id];
+    if (cd && now < cd) return;
+
+    const allQ = this.selectAdaptiveQuestions(act.subj, 1);
+    if (!allQ.length) return;
+    const q = allQ[0];
+    this.currentBuildingAction = { def, act, q };
+    this.playBgm('quiz');
+
+    document.getElementById('ba-icon').textContent = act.icon;
+    document.getElementById('ba-label').textContent = act.label;
+    document.getElementById('ba-question').textContent = q.q;
+
+    const optsEl = document.getElementById('ba-options');
+    optsEl.innerHTML = '';
+    q.opts.forEach((opt, i) => {
+      const btn = document.createElement('button');
+      btn.className = 'mining-option';
+      btn.textContent = opt;
+      btn.onclick = () => this.answerBuildingAction(i);
+      optsEl.appendChild(btn);
+    });
+
+    document.getElementById('ba-feedback').classList.add('hidden');
+    document.getElementById('building-action-popup').classList.remove('hidden');
+  }
+
+  answerBuildingAction(idx) {
+    const { currentBuildingAction } = this;
+    if (!currentBuildingAction) return;
+    const { def, act, q } = currentBuildingAction;
+    const ok = idx === q.correct;
+
+    document.querySelectorAll('#ba-options .mining-option').forEach((btn, i) => {
+      btn.disabled = true;
+      if (i === q.correct) btn.classList.add('correct');
+      else if (i === idx && !ok) btn.classList.add('wrong');
+    });
+
+    this.updateQuestionStat(q.id, ok);
+    this.playSe(ok ? 'correct' : 'wrong');
+
+    const subj = act.subj;
+    if (!this.todayLog[subj]) this.todayLog[subj] = { c: 0, w: 0 };
+    const fb = document.getElementById('ba-feedback');
+
+    if (ok) {
+      this.state.totalCorrect++;
+      this.state.currentStreak = (this.state.currentStreak || 0) + 1;
+      if (this.state.currentStreak > this.state.maxStreak) this.state.maxStreak = this.state.currentStreak;
+      this.todayCorrect++;
+      this.todayLog[subj].c++;
+      this.addXP(act.reward.xp);
+
+      if (!this.state.buildingActionCooldown) this.state.buildingActionCooldown = {};
+      this.state.buildingActionCooldown[def.id] = Date.now() + act.cooldown;
+
+      let rewardText = `✅ せいかい！ XP +${act.reward.xp}！`;
+      if (act.reward.item) {
+        const itemDef = RESOURCE_DEFS[act.reward.item];
+        this.state.inventory[act.reward.item] = (this.state.inventory[act.reward.item] || 0) + 1;
+        this.updateInventoryHUD();
+        this.refreshBuildings();
+        this.checkWorldExpansion();
+        rewardText += ` ${itemDef.icon} ${itemDef.name} +1こ！`;
+      }
+      fb.textContent = rewardText;
+      fb.className = 'mining-feedback correct';
+    } else {
+      this.state.currentStreak = 0;
+      this.todayWrong++;
+      this.todayLog[subj].w++;
+      const correctLabel = q.opts[q.correct];
+      fb.textContent = `❌ ちがう！ 正解: ${correctLabel}。${q.explain || ''}`;
+      fb.className = 'mining-feedback wrong';
+    }
+    fb.classList.remove('hidden');
+    this.state.totalGames++;
+    this.saveState();
+    this._saveTodayLog();
+
+    setTimeout(() => {
+      document.getElementById('building-action-popup').classList.add('hidden');
+      this.currentBuildingAction = null;
+      this.playBgm(this.isNightTime() ? 'night' : 'field');
+      if (ok && act.reward.item) {
+        const itemDef = RESOURCE_DEFS[act.reward.item];
+        const ix = 200, iz = 200;
+        this.spawnFloatingItem(new THREE.Vector3(ix + act.pos[0], 1.5, iz + act.pos[1]), itemDef.icon);
+      }
+    }, ok ? 1500 : 1200);
   }
 
   // ===== WORLD EXPANSION =====
