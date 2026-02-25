@@ -198,6 +198,7 @@ class Game {
     this.gameRunning = false;
     this.frame = 0;
     this.vx = 0; this.vz = 0; // velocity for smooth movement
+    this.moveTarget = null; // tap-to-move target {x, z, interact}
     this.mobs = [];
     this.fireballs = [];
     this.playerStats = {};
@@ -1583,6 +1584,30 @@ class Game {
       }
     }, { passive: true });
 
+    // Tap-to-move (touch: detect short tap vs camera drag)
+    let tapStart = null;
+    canvas.addEventListener('touchstart', e => {
+      if (tapStart) return;
+      const t = e.changedTouches[0];
+      tapStart = { id: t.identifier, x: t.clientX, y: t.clientY };
+    }, { passive: true });
+    canvas.addEventListener('touchend', e => {
+      if (!tapStart || !this.gameRunning) { tapStart = null; return; }
+      for (const t of e.changedTouches) {
+        if (t.identifier !== tapStart.id) continue;
+        if (Math.hypot(t.clientX - tapStart.x, t.clientY - tapStart.y) < 12) {
+          this._handleTap(t.clientX, t.clientY);
+        }
+        tapStart = null;
+        break;
+      }
+    }, { passive: true });
+
+    // Tap-to-move (mouse click: click event fires only without significant drag)
+    canvas.addEventListener('click', e => {
+      if (this.gameRunning) this._handleTap(e.clientX, e.clientY);
+    });
+
     // D-pad controls (常時有効: タッチ・マウス両対応)
     const dpadState = { up: false, down: false, left: false, right: false };
     const syncDpad = () => {
@@ -1721,6 +1746,28 @@ class Game {
     if (this.keys['d'] || this.keys['ArrowRight']) dx += 1;
     if (this.joystick.active) { dx += this.joystick.x; dz += this.joystick.y; }
 
+    // Tap-to-move: manual input cancels, otherwise steer toward target
+    if (this.moveTarget) {
+      if (Math.hypot(dx, dz) > 0.01) {
+        this.moveTarget = null;
+      } else {
+        const tx = this.moveTarget.x - this.player.position.x;
+        const tz = this.moveTarget.z - this.player.position.z;
+        const dist = Math.hypot(tx, tz);
+        if (dist < 1.8) {
+          const doInteract = this.moveTarget.interact;
+          this.moveTarget = null;
+          if (doInteract) this.tryInteract();
+        } else {
+          // Convert world-space direction to camera-relative input
+          const ca = this.cameraAngle;
+          const wdx = tx / dist, wdz = tz / dist;
+          dx = wdx * Math.cos(ca) + wdz * Math.sin(ca);
+          dz = -wdx * Math.sin(ca) + wdz * Math.cos(ca);
+        }
+      }
+    }
+
     const len = Math.hypot(dx, dz);
     const spd = this.settings ? this.settings.speed : 1.0;
     const ACCEL = 0.055 * spd;
@@ -1844,6 +1891,53 @@ class Game {
     } else if (this.nearBuilding && this.nearBuilding.cond(this.state)) {
       this.enterBuilding(this.nearBuilding);
     }
+  }
+
+  _handleTap(clientX, clientY) {
+    if (this.insideBuilding) return;
+    if (!document.getElementById('mining-popup').classList.contains('hidden')) return;
+
+    // Raycast onto the ground plane (y=0)
+    const ndc = new THREE.Vector2(
+      (clientX / innerWidth) * 2 - 1,
+      -(clientY / innerHeight) * 2 + 1
+    );
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera(ndc, this.camera);
+    const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+    const hit = new THREE.Vector3();
+    if (!ray.ray.intersectPlane(groundPlane, hit)) return;
+    const hx = hit.x, hz = hit.z;
+
+    // Snap to nearest resource node within 6 units
+    let bestR = null, bestRd = 6;
+    this.resourceNodes.forEach(node => {
+      if (node.depleted) return;
+      const d = Math.hypot(hx - node.mesh.position.x, hz - node.mesh.position.z);
+      if (d < bestRd) { bestRd = d; bestR = node; }
+    });
+    if (bestR) {
+      this.moveTarget = { x: bestR.mesh.position.x, z: bestR.mesh.position.z, interact: true };
+      return;
+    }
+
+    // Snap to nearest building within 10 units
+    let bestB = null, bestBd = 10;
+    BUILDING_DEFS.forEach(b => {
+      const d = Math.hypot(hx - b.pos[0], hz - b.pos[2]);
+      if (d < bestBd) { bestBd = d; bestB = b; }
+    });
+    if (bestB) {
+      this.moveTarget = { x: bestB.pos[0], z: bestB.pos[2], interact: bestB.cond(this.state) };
+      return;
+    }
+
+    // Plain ground tap
+    this.moveTarget = {
+      x: Math.max(-46, Math.min(46, hx)),
+      z: Math.max(-46, Math.min(46, hz)),
+      interact: false
+    };
   }
 
   _makeMesh(geo, mat, x, y, z) {

@@ -63,7 +63,7 @@ Three.js製の3Dマイクラ風学習ゲーム。小学生（主に2年生〜6�
 - ゲーム開始時は `dayTime = 0.3`（朝）からスタート
 - `isNightTime()`: dayTime < 0.22 または dayTime > 0.78 で夜判定
 
-### モバイル操作（Dパッド）
+### モバイル操作（Dパッド＋タップ移動）
 - スワイプ方式は廃止済み
 - 画面左下に**Dパッド（▲▼◀▶ボタン）**、右下に「👆 はいる」ボタン
 - `dpadState { up/down/left/right }` で押下状態管理
@@ -72,6 +72,20 @@ Three.js製の3Dマイクラ風学習ゲーム。小学生（主に2年生〜6�
 - `this.isMobile = navigator.maxTouchPoints > 0` でタッチデバイス判定
   - **注意**: `(hover: hover) and (pointer: fine)` のCSS media queryはiPadでも一致する場合があるので使わない
   - **注意**: `ontouchstart` や `window.innerWidth < 900` は信頼性が低い
+
+### タップ移動（tap-to-move）
+- キャンバスをタップ（またはマウスクリック）するとキャラクターが自動移動
+- `this.moveTarget = { x, z, interact }` でターゲット座標を管理
+- `_handleTap(clientX, clientY)` でRaycast処理:
+  1. Three.js Raycasterで地面平面（y=0）に光線を当てて世界座標を取得
+  2. **リソースブロック**が6ユニット以内 → そこへ移動して自動インタラクト
+  3. **建物**が10ユニット以内 → そこへ移動（解放済みなら自動でインタラクト）
+  4. それ以外 → タップした地面座標へ移動
+- `movePlayer()` でmoveTargetがあればDパッド/キーボードと共通の加速系で移動
+  - 1.8ユニット以内に到達 → moveTargetクリア＆インタラクト実行
+  - Dパッド/キーボード入力があれば即キャンセル（手動操作優先）
+- タッチの判定: touchstart〜touchendの移動量 < 12px をタップとみなす（カメラドラッグと区別）
+- マウスの判定: `click` イベントを使用（ドラッグ時はブラウザが発火しない）
 
 ### BGM・SE（Web Audio API）
 - BGM: field / night / quiz の3曲（プロシージャル）
