@@ -46,6 +46,10 @@ Three.js製の3Dマイクラ風学習ゲーム。小学生（主に2年生〜6�
 - 成功したら `localStorage(CUSTOM_Q_KEY)` にキャッシュ → オフライン時のフォールバック
 - CSVがなければ `quiz-data.js` の `QUIZ_DATA` を使用
 - `buildQuizData(rows)` で quiz-data.js と同じ構造に変換
+- **現在の questions.csv 内容**（grade2、計64問）:
+  - math: たし算・ひき算・かけ算（easy 9問 / normal 14問 / hard 9問）
+  - japanese: 読みかた・はんたいことば・漢字読み（easy 7問 / normal 8問 / hard 5問）
+  - english: 色・動物・曜日・数字・あいさつ（easy 4問 / normal 4問 / hard 2問）
 
 ### 学習履歴・適応難易度
 - **日次ログ（DAILY_LOG_KEY）**: 毎回答後 `_saveTodayLog()` で保存、起動時 `_restoreTodayLog()` で復元
@@ -114,6 +118,16 @@ Three.js製の3Dマイクラ風学習ゲーム。小学生（主に2年生〜6�
 - `this.zoneDecorMeshes`: ゾーンIDキーのMeshリスト（PointLightも含む）
 - レインボーゲート（z=30）はzone2解放まで境界外になる（Lv15必要なので問題なし）
 
+### カーソルフォロー（cursor follow）
+- マウスをホバーするだけで**カメラと体がカーソル方向を向く**（PCデフォルト動作）
+- `this.cursorAngle`: 地面上のカーソル位置から算出したワールド角度（null=無効）
+- `_updateCursorFollow(clientX, clientY)`: mousemove 時に Raycaster → 地面平面ヒット → `atan2(dx, dz)` で角度計算
+  - プレイヤーとの距離 < 1.5 は無視（真下付近の不安定動作を防止）
+- `followCamera()` 内で `cameraAngle += diff * 0.08` で lerp（カメラを滑らかに追従）
+- `movePlayer()` 内で `player.rotation.y = cursorAngle`（移動中・停止中両方）
+- **ドラッグ中**は mousedown 時に `cursorAngle = null` にして従来の手動ドラッグを優先
+- **建物に入る**と `cursorAngle = null` にしてリセット
+
 ### タップ移動（tap-to-move）
 - キャンバスをタップ（またはマウスクリック）するとキャラクターが自動移動
 - `this.moveTarget = { x, z, interact }` でターゲット座標を管理
@@ -127,6 +141,17 @@ Three.js製の3Dマイクラ風学習ゲーム。小学生（主に2年生〜6�
   - Dパッド/キーボード入力があれば即キャンセル（手動操作優先）
 - タッチの判定: touchstart〜touchendの移動量 < 12px をタップとみなす（カメラドラッグと区別）
 - マウスの判定: `click` イベントを使用（ドラッグ時はブラウザが発火しない）
+
+### 解済み問題のアイテム制限
+- **一度正解した問題は再度正解してもアイテムを獲得できない**
+- 判定: `startMining()` で `playerStats[q.id].correct > 0` を確認 → `alreadySolved` フラグを `this.mining` に保持
+- 解済み問題を出題された場合: タイトルに「（もう といた！アイテムなし）」を表示
+- 正解時の挙動:
+  - `alreadySolved = false` → 通常通り `collectItem()` でアイテム＋ブロック枯渇
+  - `alreadySolved = true` → XPのみ付与・`collectItem()` は呼ばない・ブロックは枯渇・📚フローティング表示
+- `STATS_KEY`（`mclearn3d_stats_v1`）が判定の根拠。ニューゲーム後も引き継がれる
+  - 全問リセットしたい場合は `localStorage.removeItem('mclearn3d_stats_v1')`
+- 算数の動的生成問題も ID（`gen_add2_0` 等）で追跡されるため同様に制限される
 
 ### BGM・SE（Web Audio API）
 - BGM: field / night / quiz の3曲（プロシージャル）
