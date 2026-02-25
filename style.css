@@ -132,6 +132,49 @@ html, body {
 }
 .btn-title:active { transform: translateY(2px); box-shadow: 0 2px 0 #2a6a00; }
 
+/* ===== HP HEARTS ===== */
+.hud-hearts {
+  display: flex; gap: 1px; flex-wrap: wrap; max-width: 130px;
+  background: rgba(0,0,0,0.6); padding: 4px 8px; border-radius: 6px;
+}
+.hud-hearts .heart { font-size: 1.05rem; line-height: 1.1; }
+
+/* ===== DAMAGE FLASH ===== */
+#damage-flash {
+  position: fixed; inset: 0;
+  pointer-events: none; z-index: 500;
+  background: transparent;
+}
+@keyframes dmgFlash {
+  0%   { background: rgba(255,0,0,0.42); }
+  100% { background: transparent; }
+}
+#damage-flash.active { animation: dmgFlash 0.35s forwards; }
+
+/* ===== DEATH SCREEN ===== */
+#death-screen {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.88);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 800;
+}
+#death-screen.hidden { display: none; }
+.death-inner { text-align: center; font-family: inherit; }
+.death-msg {
+  font-size: 2.4rem; font-weight: 900; color: #ff3333;
+  margin-bottom: 28px;
+  text-shadow: 2px 2px 0 #660000;
+}
+#btn-respawn {
+  font-family: inherit; font-weight: 900; font-size: 1.3rem;
+  padding: 16px 36px;
+  background: linear-gradient(180deg,#ff6644,#cc2200);
+  border: 3px solid #ff8866; border-radius: 12px;
+  color: #fff; cursor: pointer;
+  box-shadow: 0 4px 0 #881100;
+}
+#btn-respawn:active { transform: translateY(2px); box-shadow: 0 2px 0 #881100; }
+
 /* ===== HUD ===== */
 #hud {
   position: fixed;

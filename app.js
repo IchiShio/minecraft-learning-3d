@@ -80,7 +80,7 @@ const RESOURCE_SPAWN = [
 
 // ===== WORLD EXPANSION ZONES =====
 const WORLD_ZONES = [
-  { id:'zone2', name:'むらのはずれ',     bound:36, fog:0.012,
+  { id:'zone2', name:'むらのはずれ',     bound:33, fog:0.012,
     toast:'🌾 せかいが ひろがった！\nむらのはずれが かいほう！',
     cond:(s,it)=>it>=5 },
   { id:'zone3', name:'もりのおく',       bound:46, fog:0.009,
@@ -151,7 +151,7 @@ const CHAR_STORAGE_KEY = 'mclearn3d_char';
 const MOB_TYPES = {
   zombie:   { hostile:true,  speed:0.022, chaseR:14, fleeR:0,  skin:'#4A9A4A', shirt:'#2A6A2A', pants:'#1A4A1A', shoes:'#0A2A0A', flying:false, burnDay:true,  chargeRange:0   },
   creeper:  { hostile:true,  speed:0.020, chaseR:10, fleeR:0,  skin:'#55AA55', shirt:'#3A8A3A', pants:'#2A6A2A', shoes:'#1A5A1A', flying:false, burnDay:false, chargeRange:3.2 },
-  skeleton: { hostile:true,  speed:0.025, chaseR:14, fleeR:0,  skin:'#D8D8D8', shirt:'#C0C0C0', pants:'#B0B0B0', shoes:'#A0A0A0', flying:false, burnDay:true,  chargeRange:0   },
+  skeleton: { hostile:true,  speed:0.016, chaseR:14, fleeR:0,  skin:'#D8D8D8', shirt:'#C0C0C0', pants:'#B0B0B0', shoes:'#A0A0A0', flying:false, burnDay:true,  chargeRange:0,  rangedAttack:true },
   pig:      { hostile:false, speed:0.015, chaseR:0,  fleeR:5,  skin:'#F0B0A0', shirt:'#E89888', pants:'#E89888', shoes:'#D07060', flying:false, burnDay:false, chargeRange:0   },
   sheep:    { hostile:false, speed:0.015, chaseR:0,  fleeR:5,  skin:'#D8D8C0', shirt:'#DDDDC8', pants:'#D0D0B8', shoes:'#B0B0A0', flying:false, burnDay:false, chargeRange:0   },
   chicken:  { hostile:false, speed:0.012, chaseR:0,  fleeR:4,  skin:'#FFFFFF', shirt:'#EEEEEE', pants:'#FFB040', shoes:'#FF8800', flying:false, burnDay:false, chargeRange:0   },
@@ -256,6 +256,9 @@ class Game {
     this.moveTarget = null; // tap-to-move target {x, z, interact}
     this.cursorAngle = null; // カーソル方向への自動向き（マウスホバーで更新）
     this.worldBound = 28;  // 現在のプレイヤー移動範囲（ゾーン拡張で増加）
+    this.playerMaxHp = 6;
+    this.playerHp = 6;
+    this.invincibleTimer = 0;
     this.zoneDecorMeshes = {}; // ゾーンごとのデコレーションメッシュ
     this.mobs = [];
     this.fireballs = [];
@@ -914,6 +917,10 @@ class Game {
       setTimeout(() => sweep(660, 440, 0.15), 150);
     } else if (name === 'start') {
       [261, 330, 392, 523].forEach((f, i) => setTimeout(() => tone(f, 0.3, 'sine', 0.28), i * 120));
+    } else if (name === 'hurt') {
+      sweep(300, 180, 0.2, 'square');
+    } else if (name === 'death') {
+      [440, 330, 220, 147].forEach((f, i) => setTimeout(() => tone(f, 0.28, 'sawtooth', 0.38), i * 110));
     }
   }
 
@@ -1574,6 +1581,24 @@ class Game {
         const sw = Math.sin(Date.now()*0.013)*0.55;
         ud.legL.rotation.x = sw; ud.legR.rotation.x = -sw;
       }
+
+      // ===== 攻撃 =====
+      if (def.hostile && !def.flying && !this.insideBuilding) {
+        ud.attackCd = (ud.attackCd || 0) - 1;
+        if (def.rangedAttack) {
+          // スケルトン: 遠距離から矢を発射
+          if (dist < def.chaseR && dist > 3 && ud.attackCd <= 0) {
+            this.spawnArrow(mob);
+            ud.attackCd = 90 + Math.floor(Math.random() * 40);
+          }
+        } else {
+          // ゾンビ: 接近メレー
+          if (dist < 1.5 && ud.attackCd <= 0) {
+            this.hurtPlayer(1);
+            ud.attackCd = 60;
+          }
+        }
+      }
     });
 
     // 削除リスト処理
@@ -1594,7 +1619,10 @@ class Game {
       fb.position.z += fb.userData.vz;
       fb.rotation.x += 0.15; fb.rotation.z += 0.1;
       if (fb.userData.life <= 0) { this.scene.remove(fb); return false; }
-      if (Math.hypot(fb.position.x-px, fb.position.z-pz) < 1.2) { this.scene.remove(fb); return false; }
+      if (Math.hypot(fb.position.x-px, fb.position.z-pz) < 1.2) {
+        if (!this.insideBuilding) this.hurtPlayer(fb.userData.isArrow ? 1 : 2);
+        this.scene.remove(fb); return false;
+      }
       return true;
     });
   }
@@ -1629,14 +1657,74 @@ class Game {
       else { this.scene.remove(boom); mat.dispose(); }
     };
     requestAnimationFrame(expand);
-    // プレイヤーが近ければ警告表示
+    // プレイヤーが近ければダメージ + ノックバック
     const d = Math.hypot(pos.x-this.player.position.x, pos.z-this.player.position.z);
-    if (d < 5) {
-      const hint = document.getElementById('interact-hint');
-      hint.textContent = '💥 クリーパーが爆発した！';
-      hint.classList.remove('hidden');
-      setTimeout(() => hint.classList.add('hidden'), 1800);
+    if (d < 5 && !this.insideBuilding) {
+      this.hurtPlayer(3);
+      const kdx = this.player.position.x - pos.x, kdz = this.player.position.z - pos.z;
+      const kd = Math.hypot(kdx, kdz) || 1;
+      this.vx += (kdx / kd) * 0.9;
+      this.vz += (kdz / kd) * 0.9;
     }
+  }
+
+  // ===== スケルトンの矢 =====
+  spawnArrow(mob) {
+    const arrow = new THREE.Mesh(
+      new THREE.BoxGeometry(0.08, 0.08, 0.5),
+      new THREE.MeshBasicMaterial({ color: 0x8B5E3C })
+    );
+    arrow.position.set(mob.position.x, 1.5, mob.position.z);
+    const px = this.player.position.x, pz = this.player.position.z;
+    const dx = px - mob.position.x, dz = pz - mob.position.z;
+    const d = Math.hypot(dx, dz) || 1;
+    const spd = 0.3;
+    arrow.rotation.y = Math.atan2(dx, dz);
+    arrow.userData = { vx: (dx/d)*spd, vy: 0, vz: (dz/d)*spd, life: 70, isArrow: true };
+    this.scene.add(arrow);
+    this.fireballs.push(arrow);
+  }
+
+  // ===== HP / ダメージ =====
+  hurtPlayer(dmg) {
+    if (this.invincibleTimer > 0 || !this.gameRunning) return;
+    this.playerHp = Math.max(0, this.playerHp - dmg);
+    this.invincibleTimer = 80;
+    this._updateHpHud();
+    this.playSe('hurt');
+    const flash = document.getElementById('damage-flash');
+    if (flash) { flash.classList.remove('active'); void flash.offsetWidth; flash.classList.add('active'); }
+    if (this.playerHp <= 0) this._playerDeath();
+  }
+
+  _playerDeath() {
+    this.gameRunning = false;
+    this.player.visible = true;
+    this.stopBgm();
+    this.playSe('death');
+    document.getElementById('death-screen').classList.remove('hidden');
+  }
+
+  _respawn() {
+    this.playerHp = this.playerMaxHp;
+    this.invincibleTimer = 180;
+    this.player.position.set(0, 0, 0);
+    this.vx = 0; this.vz = 0;
+    this.moveTarget = null;
+    this.gameRunning = true;
+    this._updateHpHud();
+    document.getElementById('death-screen').classList.add('hidden');
+    this.playBgm(this.isNightTime() ? 'night' : 'field');
+  }
+
+  _updateHpHud() {
+    const el = document.getElementById('hud-hearts');
+    if (!el) return;
+    let html = '';
+    for (let i = 0; i < this.playerMaxHp; i++) {
+      html += `<span class="heart">${i < this.playerHp ? '❤️' : '🖤'}</span>`;
+    }
+    el.innerHTML = html;
   }
 
   // ===== 昼夜サイクル =====
@@ -1956,6 +2044,17 @@ class Game {
     this.mobSpawnTick();
     this.checkNearby();
     this.checkNearbyInterior();
+    // HP無敵タイマー・点滅・自然回復
+    if (this.invincibleTimer > 0) {
+      this.invincibleTimer--;
+      this.player.visible = (this.invincibleTimer % 8 < 4);
+    } else {
+      this.player.visible = true;
+      if (this.playerHp < this.playerMaxHp && this.frame % 600 === 0) {
+        this.playerHp = Math.min(this.playerMaxHp, this.playerHp + 1);
+        this._updateHpHud();
+      }
+    }
     // Animate building action indicator
     if (this.actionIndicatorMesh) {
       this.actionIndicatorMesh.position.y = 1.5 + Math.sin(this.frame * 0.06) * 0.18;
@@ -2066,6 +2165,17 @@ class Game {
     } else {
       this.player.position.x = Math.max(-this.worldBound, Math.min(this.worldBound, this.player.position.x + this.vx));
       this.player.position.z = Math.max(-this.worldBound, Math.min(this.worldBound, this.player.position.z + this.vz));
+      // 建物への衝突（AABB押し出し）
+      BUILDING_DEFS.forEach(def => {
+        const [bx,,bz] = def.pos, [bw,,bd] = def.size;
+        const hw = bw / 2 + 0.25, hd = bd / 2 + 0.25;
+        const cx = this.player.position.x - bx, cz = this.player.position.z - bz;
+        if (Math.abs(cx) < hw && Math.abs(cz) < hd) {
+          const ox = hw - Math.abs(cx), oz = hd - Math.abs(cz);
+          if (ox < oz) this.player.position.x = bx + Math.sign(cx) * hw;
+          else         this.player.position.z = bz + Math.sign(cz) * hd;
+        }
+      });
     }
 
     const spd2 = Math.hypot(this.vx, this.vz);
@@ -3131,7 +3241,13 @@ class Game {
       if (!this.state.buildingActionCooldown) this.state.buildingActionCooldown = {};
       this.state.buildingActionCooldown[def.id] = Date.now() + act.cooldown;
 
+      // 温泉: HP全回復
+      if (def.id === 'onsen' && this.playerHp < this.playerMaxHp) {
+        this.playerHp = this.playerMaxHp;
+        this._updateHpHud();
+      }
       let rewardText = `✅ せいかい！ XP +${act.reward.xp}！`;
+      if (def.id === 'onsen') rewardText += ' ♨️ HP かいふく！';
       if (act.reward.item) {
         const itemDef = RESOURCE_DEFS[act.reward.item];
         this.state.inventory[act.reward.item] = (this.state.inventory[act.reward.item] || 0) + 1;
@@ -3383,6 +3499,9 @@ class Game {
     this.mobSpawnTimer = 0;
     this.gameRunning = true;
     this.vx = 0; this.vz = 0;
+    this.playerHp = this.playerMaxHp;
+    this.invincibleTimer = 0;
+    this._updateHpHud();
     this.initAudio();
     this.playSe('start');
     setTimeout(() => this.playBgm('field'), 600);
@@ -3488,6 +3607,11 @@ addEventListener('load', () => {
         // 建物内アクションボタン（タップ用）
         document.getElementById('btn-building-action').addEventListener('click', () => {
           game.tryInteract();
+        });
+
+        // リスポーンボタン
+        document.getElementById('btn-respawn').addEventListener('click', () => {
+          game._respawn();
         });
 
         // BGM音量スライダー

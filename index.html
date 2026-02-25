@@ -48,6 +48,7 @@
 
 <!-- HUD -->
 <div id="hud" class="hidden">
+  <div class="hud-hearts" id="hud-hearts"></div>
   <div class="hud-level" id="hud-level">Lv.1</div>
   <div class="hud-xp-wrap">
     <div class="hud-xp-label">XP: <span id="hud-xp-text">0 / 50</span></div>
@@ -169,6 +170,17 @@
       </div>
     </div>
     <button class="settings-close-btn" id="btn-settings-close">✓ とじる</button>
+  </div>
+</div>
+
+<!-- Damage Flash -->
+<div id="damage-flash"></div>
+
+<!-- Death Screen -->
+<div id="death-screen" class="hidden">
+  <div class="death-inner">
+    <div class="death-msg">💀 やられた！</div>
+    <button id="btn-respawn">♻️ もう一度！</button>
   </div>
 </div>
 
