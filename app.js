@@ -6,7 +6,8 @@ const STATS_KEY = 'mclearn3d_stats_v1';
 const SETTINGS_KEY = 'mclearn3d_settings_v1';
 const CUSTOM_Q_KEY  = 'mclearn3d_custom_q_v1';
 const DAILY_LOG_KEY = 'mclearn3d_daily_v1';
-const DEFAULT_SETTINGS = { speed: 1.0, bgmVol: 0.5, seVol: 0.7, difficulty: 'normal' };
+const SYNC_GIST_KEY = 'mclearn3d_gist_v1'; // { id, syncedAt }
+const DEFAULT_SETTINGS = { speed: 1.0, bgmVol: 0.5, seVol: 0.7, difficulty: 'normal', githubToken: '' };
 // レベルから現在の学年を返す (Lv1-2=2年生, Lv3-5=3年生, ...)
 const GRADE_FOR_LEVEL = lv => lv <= 2 ? 2 : lv <= 5 ? 3 : lv <= 9 ? 4 : lv <= 14 ? 5 : 6;
 const QUIZ_PER_SESSION = 5;
@@ -264,6 +265,7 @@ class Game {
     this._bgmTimeout = null;
     this._wasNight = false;
     this._activeOscNodes = [];
+    this._syncTimer = null;
     this.insideBuilding = false;
     this.interiorGroup = null;
     this.prevPlayerPos = null;
@@ -622,10 +624,16 @@ class Game {
     seSlider.value  = Math.round(s.seVol  * 100);
     document.getElementById('settings-bgm-val').textContent = bgmSlider.value + '%';
     document.getElementById('settings-se-val').textContent  = seSlider.value  + '%';
+    // Cloud sync
+    const tokenEl = document.getElementById('settings-token');
+    if (tokenEl) tokenEl.value = s.githubToken || '';
+    this._updateSyncStatus();
     panel.classList.remove('hidden');
   }
 
   closeSettings() {
+    const tokenEl = document.getElementById('settings-token');
+    if (tokenEl) this.settings.githubToken = tokenEl.value.trim();
     document.getElementById('settings-panel').classList.add('hidden');
     this.saveSettings();
   }
@@ -653,6 +661,64 @@ class Game {
     a.href = url; a.download = 'minecraft-stats.json'; a.click();
     URL.revokeObjectURL(url);
     this._showToast('📊 せいせきを エクスポートしました！\ntools/dashboard.js で ひらいてね');
+  }
+
+  // ===== CLOUD SYNC (GitHub Gist) =====
+  async syncStatsToGitHub() {
+    const token = this.settings.githubToken;
+    if (!token) return;
+    const stats = {};
+    Object.entries(this.playerStats).forEach(([id, s]) => {
+      if (s.seen > 0) stats[id] = { seen: s.seen, correct: s.correct, wrong: s.wrong };
+    });
+    const payload = { syncedAt: new Date().toISOString(), level: this.state.level, stats };
+    const fileContent = JSON.stringify(payload);
+    let gistId = null;
+    try { const saved = JSON.parse(localStorage.getItem(SYNC_GIST_KEY) || 'null'); gistId = saved?.id || null; } catch(e) {}
+    const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
+    try {
+      let res;
+      if (gistId) {
+        res = await fetch(`https://api.github.com/gists/${gistId}`, {
+          method: 'PATCH', headers,
+          body: JSON.stringify({ files: { 'minecraft-stats.json': { content: fileContent } } }),
+        });
+      } else {
+        res = await fetch('https://api.github.com/gists', {
+          method: 'POST', headers,
+          body: JSON.stringify({ description: 'Minecraft Learning Stats', public: false, files: { 'minecraft-stats.json': { content: fileContent } } }),
+        });
+      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = await res.json();
+      localStorage.setItem(SYNC_GIST_KEY, JSON.stringify({ id: json.id, syncedAt: payload.syncedAt }));
+      this._updateSyncStatus();
+      this._showToast('☁️ クラウドに同期しました！');
+    } catch(e) {
+      console.warn('Gist sync failed:', e);
+      this._showToast('⚠️ 同期に失敗しました');
+    }
+  }
+
+  _scheduleSyncToGitHub() {
+    if (!this.settings.githubToken) return;
+    if (this._syncTimer) clearTimeout(this._syncTimer);
+    this._syncTimer = setTimeout(() => { this._syncTimer = null; this.syncStatsToGitHub(); }, 30000);
+  }
+
+  _updateSyncStatus() {
+    const el = document.getElementById('sync-status');
+    if (!el) return;
+    if (!this.settings.githubToken) { el.textContent = 'トークン未設定'; return; }
+    try {
+      const saved = JSON.parse(localStorage.getItem(SYNC_GIST_KEY) || 'null');
+      if (saved?.syncedAt) {
+        const d = new Date(saved.syncedAt);
+        el.textContent = `最終同期: ${d.toLocaleString('ja-JP', { month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit' })}`;
+      } else {
+        el.textContent = 'まだ同期していません';
+      }
+    } catch(e) { el.textContent = 'まだ同期していません'; }
   }
 
   // ===== AUDIO =====
@@ -2756,6 +2822,7 @@ class Game {
     this.state.totalGames++;
     this.saveState();
     this._saveTodayLog();
+    this._scheduleSyncToGitHub();
 
     setTimeout(() => {
       document.getElementById('mining-popup').classList.add('hidden');
@@ -2900,6 +2967,7 @@ class Game {
     this.state.totalGames++;
     this.saveState();
     this._saveTodayLog();
+    this._scheduleSyncToGitHub();
 
     setTimeout(() => {
       document.getElementById('building-action-popup').classList.add('hidden');
@@ -3192,6 +3260,8 @@ addEventListener('load', () => {
         document.getElementById('btn-export-stats').addEventListener('click', () => {
           game.exportStats();
         });
+        const syncNowBtn = document.getElementById('btn-sync-now');
+        if (syncNowBtn) syncNowBtn.addEventListener('click', () => game.syncStatsToGitHub());
 
         // スピードボタン
         document.querySelectorAll('.speed-btn').forEach(btn => {

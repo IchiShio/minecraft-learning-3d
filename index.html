@@ -157,6 +157,14 @@
       <div class="settings-label">📊 がくしゅうきろく</div>
       <button class="settings-export-btn" id="btn-export-stats">📥 エクスポート</button>
     </div>
+    <div class="settings-section">
+      <div class="settings-label">☁️ クラウド同期 <span style="font-size:.7rem;color:#aaa">（管理者が設定）</span></div>
+      <input type="password" class="settings-token-input" id="settings-token" placeholder="ghp_... （gistスコープのトークン）" autocomplete="off">
+      <div style="margin-top:6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button class="settings-export-btn" id="btn-sync-now">🔄 今すぐ同期</button>
+        <span id="sync-status" style="font-size:.75rem;color:#aaa"></span>
+      </div>
+    </div>
     <button class="settings-close-btn" id="btn-settings-close">✓ とじる</button>
   </div>
 </div>

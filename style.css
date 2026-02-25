@@ -336,6 +336,13 @@ html, body {
 }
 .settings-export-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 #1a3a88; }
 
+.settings-token-input {
+  width: 100%; padding: 8px 10px; border-radius: 8px; border: 2px solid #555;
+  background: #1a1a2a; color: #eee; font-size: 0.8rem; font-family: monospace;
+  outline: none; box-sizing: border-box; margin-top: 4px;
+}
+.settings-token-input:focus { border-color: #6699ff; }
+
 /* ===== WORLD CLEARS PANEL ===== */
 #world-clears {
   position: fixed;

@@ -199,13 +199,11 @@ tr:hover td{background:#1a2a3a}
 <h1>📊 マイクラ学習 ダッシュボード</h1>
 
 <div class="flow">
-  <span class="flow-step">📱 タブレットでゲーム（GitHub Pages）</span>
+  <span class="flow-step">📱 タブレットでゲーム</span>
   <span class="flow-arr">→</span>
-  <span class="flow-step">⚙️ せってい → 📥 エクスポート</span>
+  <span class="flow-step">☁️ Gist自動同期 <span style="color:#6aff88">（推奨）</span></span>
   <span class="flow-arr">→</span>
-  <span class="flow-step">💻 AirDrop / メール / iCloud でPCへ</span>
-  <span class="flow-arr">→</span>
-  <span class="flow-step">📊 ここにドロップ</span>
+  <span class="flow-step">💻 下の「Gistから読み込む」</span>
   <span class="flow-arr">→</span>
   <span class="flow-step">🤖 AI分析 → 📝 git push</span>
   <span class="flow-arr">→</span>
@@ -214,11 +212,20 @@ tr:hover td{background:#1a2a3a}
 
 <!-- ① 統計読み込み -->
 <section>
-  <h2>① せいせきファイルを読み込む</h2>
+  <h2>① せいせきを読み込む</h2>
+  <div style="background:#0d1e38;border:1px solid #2a5a8a;border-radius:6px;padding:14px;margin-bottom:14px">
+    <div style="color:#88ccff;font-size:.88rem;margin-bottom:8px">☁️ <strong>Gistから自動読み込み</strong>（タブレットで「クラウド同期」を設定済みの場合）</div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <input type="password" id="gist-token" placeholder="ghp_... （gistスコープのトークン）" style="flex:1;min-width:200px;padding:7px 10px;background:#1a1a2a;border:1px solid #444;color:#eee;border-radius:4px;font-family:monospace;font-size:.82rem">
+      <button class="btn btn-blue btn-sm" onclick="loadFromGist()">☁️ Gistから読み込む</button>
+    </div>
+    <div id="gist-status" style="font-size:.78rem;color:#888;margin-top:6px"></div>
+  </div>
+  <div style="color:#667788;font-size:.8rem;text-align:center;margin-bottom:10px">── または ファイルで読み込む ──</div>
   <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
     <span class="dz-icon">📂</span>
     <div class="dz-text">minecraft-stats.json をここにドロップ</div>
-    <div class="dz-sub">またはクリックしてファイルを選択</div>
+    <div class="dz-sub">またはクリックしてファイルを選択（⚙️ → 📥 エクスポートで作成）</div>
   </div>
   <input type="file" id="file-input" accept=".json" style="display:none" onchange="handleFileSelect(event)">
   <div id="load-status" class="load-status"></div>
@@ -316,6 +323,33 @@ function readJsonFile(file) {
   reader.readAsText(file);
 }
 
+// ===== Gist 読み込み =====
+async function loadFromGist() {
+  const token = document.getElementById('gist-token').value.trim();
+  const statusEl = document.getElementById('gist-status');
+  const loadStatusEl = document.getElementById('load-status');
+  if (!token) { statusEl.textContent = '⚠️ トークンを入力してください'; return; }
+  statusEl.textContent = '⏳ Gistを検索中...';
+  try {
+    const headers = { 'Authorization': 'Bearer ' + token };
+    const r1 = await fetch('https://api.github.com/gists', { headers });
+    if (!r1.ok) throw new Error('認証失敗（HTTP ' + r1.status + '）。トークンを確認してください');
+    const gists = await r1.json();
+    const gist = gists.find(g => g.files && g.files['minecraft-stats.json']);
+    if (!gist) { statusEl.textContent = '⚠️ Gistが見つかりません。タブレットで同期を実行してください'; return; }
+    statusEl.textContent = '⏳ データを読み込み中...';
+    const r2 = await fetch('https://api.github.com/gists/' + gist.id, { headers });
+    const detail = await r2.json();
+    const content = JSON.parse(detail.files['minecraft-stats.json'].content);
+    const syncedAt = content.syncedAt ? new Date(content.syncedAt).toLocaleString('ja-JP') : '不明';
+    statusEl.textContent = '✅ 同期日時: ' + syncedAt;
+    await processStats(content);
+    loadStatusEl.textContent = '';
+  } catch(e) {
+    statusEl.textContent = '❌ エラー: ' + e.message;
+  }
+}
+
 // ===== localhost 開発用 =====
 async function loadFromLocalStorage() {
   const statusEl = document.getElementById('load-status');
@@ -328,12 +362,22 @@ async function loadFromLocalStorage() {
   await processStats(JSON.parse(raw));
 }
 
-// ===== 統計処理（ファイル or localStorage 共通） =====
-async function processStats(stats) {
+// ===== 統計処理（ファイル / Gist / localStorage 共通） =====
+async function processStats(data) {
   const statusEl = document.getElementById('load-status');
-  if (!stats || Object.keys(stats).length === 0) {
+  if (!data || Object.keys(data).length === 0) {
     statusEl.textContent = '⚠️ 統計データがありません。ゲームで問題を解いてからエクスポートしてください。';
     return;
+  }
+  // フォーマット判定・正規化 → { id: { seen, correct, wrong } }
+  let stats;
+  if (data.stats && typeof data.stats === 'object') {
+    stats = data.stats; // Gist形式: { syncedAt, level, stats: {...} }
+  } else if (data.questions && Array.isArray(data.questions)) {
+    stats = {}; // エクスポート形式: { exportedAt, questions: [{id,seen,correct,wrong},...] }
+    data.questions.forEach(q => { stats[q.id] = { seen:q.seen||0, correct:q.correct||0, wrong:q.wrong||0 }; });
+  } else {
+    stats = data; // Raw形式（localStorage）: { id: { seen, correct, wrong } }
   }
 
   let questions = [];
