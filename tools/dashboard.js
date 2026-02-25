@@ -150,17 +150,26 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:#1a1a2e;color:#ddd;font-family:monospace,sans-serif;min-height:100vh;padding:16px 20px}
 a{color:#88ccff}
-h1{color:#5dbb63;text-align:center;font-size:1.5rem;margin-bottom:20px;text-shadow:0 0 8px #3a7a3e}
+h1{color:#5dbb63;text-align:center;font-size:1.5rem;margin-bottom:16px;text-shadow:0 0 8px #3a7a3e}
 h2{color:#88ccff;font-size:1rem;margin-bottom:10px;border-left:4px solid #4499dd;padding-left:8px}
 section{background:#16213e;border:2px solid #2a2a4a;border-radius:8px;padding:16px;margin-bottom:18px}
-.notice{background:#1a2a1a;border:1px solid #3a6a3a;border-radius:6px;padding:12px;color:#aaddaa;font-size:.85rem;margin-bottom:18px;line-height:1.6}
-.notice code{background:#0a1a0a;padding:2px 6px;border-radius:3px;color:#7dff4f}
+.flow{display:flex;flex-wrap:wrap;gap:6px;align-items:center;background:#0f1a2e;border:1px solid #2a3a5a;border-radius:6px;padding:12px;margin-bottom:16px;font-size:.82rem;color:#aabbcc}
+.flow-step{background:#1a2a4a;border:1px solid #3a5a8a;border-radius:4px;padding:4px 10px;white-space:nowrap}
+.flow-arr{color:#4488cc}
 .btn{background:#3a7a40;color:#fff;border:none;border-radius:4px;padding:10px 22px;font-size:.95rem;cursor:pointer;font-family:inherit;margin:4px 4px 4px 0;transition:background .15s}
 .btn:hover{background:#5dbb63}
 .btn-blue{background:#2255aa}.btn-blue:hover{background:#3377cc}
 .btn-orange{background:#995511}.btn-orange:hover{background:#bb7722}
 .btn-red{background:#991111}.btn-red:hover{background:#cc2222}
+.btn-sm{padding:6px 14px;font-size:.82rem}
 .btn:disabled{opacity:.4;cursor:not-allowed}
+.drop-zone{border:2px dashed #4488cc;border-radius:8px;padding:28px 16px;text-align:center;cursor:pointer;transition:all .2s;margin-bottom:12px}
+.drop-zone:hover,.drop-zone.drag-over{border-color:#5dbb63;background:#0a1a2a}
+.drop-zone .dz-icon{font-size:2.4rem;display:block;margin-bottom:6px}
+.drop-zone .dz-text{color:#88aacc;font-size:.9rem}
+.drop-zone .dz-sub{color:#556677;font-size:.78rem;margin-top:4px}
+.dev-link{font-size:.78rem;color:#556677;margin-top:10px}
+.dev-link a{color:#6688aa}
 .summary-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;margin-bottom:14px}
 .card{background:#0f3460;border-radius:6px;padding:10px;text-align:center}
 .card .num{font-size:1.8rem;font-weight:bold;color:#5dbb63}
@@ -183,22 +192,37 @@ tr:hover td{background:#1a2a3a}
 .spin{color:#ffcc44;margin:8px 0;font-size:.9rem}
 .hidden{display:none!important}
 .tscroll{overflow-x:auto;max-height:340px;overflow-y:auto}
+.load-status{margin-top:8px;font-size:.85rem;color:#aaa}
 </style>
 </head>
 <body>
 <h1>📊 マイクラ学習 ダッシュボード</h1>
 
-<div class="notice" id="local-notice">
-  ⚠️ ダッシュボードを使う場合は <a href="/game/" target="_blank">http://localhost:3001/game/</a> でゲームを開いてください。<br>
-  GitHub Pages (<code>ichishio.github.io</code>) でプレイした統計は読み込めません。<br>
-  <span id="stats-check-msg"></span>
+<div class="flow">
+  <span class="flow-step">📱 タブレットでゲーム（GitHub Pages）</span>
+  <span class="flow-arr">→</span>
+  <span class="flow-step">⚙️ せってい → 📥 エクスポート</span>
+  <span class="flow-arr">→</span>
+  <span class="flow-step">💻 AirDrop / メール / iCloud でPCへ</span>
+  <span class="flow-arr">→</span>
+  <span class="flow-step">📊 ここにドロップ</span>
+  <span class="flow-arr">→</span>
+  <span class="flow-step">🤖 AI分析 → 📝 git push</span>
+  <span class="flow-arr">→</span>
+  <span class="flow-step">📱 自動反映</span>
 </div>
 
 <!-- ① 統計読み込み -->
 <section>
-  <h2>① せいせきを読み込む</h2>
-  <button class="btn" id="btn-load" onclick="loadStats()">🔄 localStorage から読み込む</button>
-  <div id="load-status" style="margin-top:8px;font-size:.85rem;color:#aaa"></div>
+  <h2>① せいせきファイルを読み込む</h2>
+  <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
+    <span class="dz-icon">📂</span>
+    <div class="dz-text">minecraft-stats.json をここにドロップ</div>
+    <div class="dz-sub">またはクリックしてファイルを選択</div>
+  </div>
+  <input type="file" id="file-input" accept=".json" style="display:none" onchange="handleFileSelect(event)">
+  <div id="load-status" class="load-status"></div>
+  <div class="dev-link">開発用（localhost）: <a href="#" onclick="loadFromLocalStorage();return false">localStorageから読み込む</a></div>
 </section>
 
 <!-- ② 統計表示 -->
@@ -241,10 +265,10 @@ tr:hover td{background:#1a2a3a}
 </section>
 
 <script>
-let statsData   = null;  // [{id,subject,grade,q,diff,seen,correct,wrong}]
+let statsData   = null;
 let analysisText = '';
 
-// ===== CSV パーサー（app.js の parseCSV + buildQuizData と同じロジック） =====
+// ===== CSV パーサー =====
 function parseCSV(text) {
   const lines = text.split('\\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
   if (lines.length < 2) return [];
@@ -257,21 +281,61 @@ function parseCSV(text) {
   }).filter(r => r.subject && r.question && r.opt1 && r.opt2);
 }
 
-// ===== 統計読み込み =====
-async function loadStats() {
+// ===== ドロップゾーン =====
+const dropZone = document.getElementById('drop-zone');
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) readJsonFile(file);
+});
+
+function handleFileSelect(e) {
+  const file = e.target.files[0];
+  if (file) readJsonFile(file);
+}
+
+function readJsonFile(file) {
   const statusEl = document.getElementById('load-status');
   statusEl.textContent = '読み込み中...';
+  if (!file.name.endsWith('.json')) {
+    statusEl.textContent = '⚠️ .json ファイルを選択してください（ゲームの「エクスポート」で作成できます）';
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = async e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      await processStats(data);
+    } catch(err) {
+      statusEl.textContent = '❌ JSONの解析に失敗しました: ' + err.message;
+    }
+  };
+  reader.readAsText(file);
+}
 
-  // localStorage から統計取得
-  const statsRaw = localStorage.getItem('mclearn3d_stats_v1');
-  const stats = statsRaw ? JSON.parse(statsRaw) : {};
+// ===== localhost 開発用 =====
+async function loadFromLocalStorage() {
+  const statusEl = document.getElementById('load-status');
+  statusEl.textContent = '読み込み中（localStorage）...';
+  const raw = localStorage.getItem('mclearn3d_stats_v1');
+  if (!raw) {
+    statusEl.textContent = '⚠️ localStorageに統計データがありません。http://localhost:3001/game/ でゲームをプレイしてください。';
+    return;
+  }
+  await processStats(JSON.parse(raw));
+}
 
-  if (Object.keys(stats).length === 0) {
-    statusEl.textContent = '⚠️ まだ統計データがありません。http://localhost:3001/game/ でゲームをプレイしてください。';
+// ===== 統計処理（ファイル or localStorage 共通） =====
+async function processStats(stats) {
+  const statusEl = document.getElementById('load-status');
+  if (!stats || Object.keys(stats).length === 0) {
+    statusEl.textContent = '⚠️ 統計データがありません。ゲームで問題を解いてからエクスポートしてください。';
     return;
   }
 
-  // questions.csv を取得して問題テキストと紐付け
   let questions = [];
   try {
     const csvRes = await fetch('/game/questions.csv');
@@ -457,21 +521,6 @@ async function implementQuestions() {
 }
 
 function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-
-// ページロード時に localStorage の有無をチェック
-window.addEventListener('load', () => {
-  const raw = localStorage.getItem('mclearn3d_stats_v1');
-  const count = raw ? Object.keys(JSON.parse(raw)).length : 0;
-  const msg = document.getElementById('stats-check-msg');
-  if (count > 0) {
-    msg.textContent = \`✅ このブラウザには \${count} 問の統計があります。下のボタンで読み込んでください。\`;
-    msg.style.color = '#88ff88';
-    // ゲームをlocalで開いていれば通知を省略
-    document.getElementById('local-notice').style.borderColor = '#2a6a2a';
-  } else {
-    msg.textContent = '統計がまだありません。上のリンクからゲームを開いてプレイしてください。';
-  }
-});
 </script>
 </body>
 </html>`;
@@ -563,12 +612,16 @@ http.createServer(async (req, res) => {
   res.end('Not Found');
 
 }).listen(PORT, () => {
-  console.log('\n📊 マイクラ学習 ダッシュボード');
-  console.log(`   ダッシュボード → http://localhost:${PORT}/`);
-  console.log(`   ゲーム (local) → http://localhost:${PORT}/game/`);
-  console.log('\n   ① ゲームは http://localhost:3001/game/ で開く');
-  console.log('   ② ダッシュボード http://localhost:3001/ でボタンを押すだけ');
+  console.log('\n📊 マイクラ学習 ダッシュボード（管理者用）');
+  console.log(`   http://localhost:${PORT}/  ← ブラウザで開く`);
+  console.log('\n   使い方:');
+  console.log('   ① タブレットのゲーム「せってい → エクスポート」で minecraft-stats.json を取得');
+  console.log('   ② AirDrop / メール / iCloud Drive でこのPCに転送');
+  console.log('   ③ ダッシュボードにファイルをドロップ → AI分析 → git push');
+  console.log('   ④ タブレットのゲームに自動反映（GitHub Pages 更新）');
   if (!process.env.ANTHROPIC_API_KEY) {
     console.warn('\n   ⚠ ANTHROPIC_API_KEY が未設定です。tools/.env を作成してください。\n');
+  } else {
+    console.log('\n   ✅ ANTHROPIC_API_KEY 設定済み');
   }
 });
