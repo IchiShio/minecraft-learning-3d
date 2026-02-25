@@ -216,6 +216,7 @@ class Game {
     this.frame = 0;
     this.vx = 0; this.vz = 0; // velocity for smooth movement
     this.moveTarget = null; // tap-to-move target {x, z, interact}
+    this.cursorAngle = null; // カーソル方向への自動向き（マウスホバーで更新）
     this.worldBound = 28;  // 現在のプレイヤー移動範囲（ゾーン拡張で増加）
     this.zoneDecorMeshes = {}; // ゾーンごとのデコレーションメッシュ
     this.mobs = [];
@@ -1576,12 +1577,16 @@ class Game {
     const canvas = document.getElementById('game-canvas');
     let camDrag = null;
     canvas.addEventListener('mousedown', e => {
+      this.cursorAngle = null; // ドラッグ中はカーソルフォローを停止
       camDrag = { x: e.clientX, y: e.clientY, angle: this.cameraAngle, pitch: this.cameraPitch };
     });
     window.addEventListener('mousemove', e => {
-      if (!camDrag) return;
-      this.cameraAngle = camDrag.angle - (e.clientX - camDrag.x) * 0.006;
-      this.cameraPitch = Math.max(-0.15, Math.min(0.80, camDrag.pitch - (e.clientY - camDrag.y) * 0.004));
+      if (camDrag) {
+        this.cameraAngle = camDrag.angle - (e.clientX - camDrag.x) * 0.006;
+        this.cameraPitch = Math.max(-0.15, Math.min(0.80, camDrag.pitch - (e.clientY - camDrag.y) * 0.004));
+      } else if (this.gameRunning && !this.insideBuilding) {
+        this._updateCursorFollow(e.clientX, e.clientY);
+      }
     });
     window.addEventListener('mouseup', () => { camDrag = null; });
 
@@ -1810,12 +1815,18 @@ class Game {
       const spd = Math.hypot(this.vx, this.vz);
       if (spd > MAX_SPD) { this.vx = this.vx/spd*MAX_SPD; this.vz = this.vz/spd*MAX_SPD; }
 
-      // Face direction of velocity
-      if (spd > 0.01) this.player.rotation.y = Math.atan2(this.vx, this.vz);
+      // Face direction of velocity (カーソルフォロー中はそちらを優先)
+      if (this.cursorAngle !== null) {
+        this.player.rotation.y = this.cursorAngle;
+      } else if (spd > 0.01) {
+        this.player.rotation.y = Math.atan2(this.vx, this.vz);
+      }
     } else {
       this.vx *= FRICTION;
       this.vz *= FRICTION;
       if (Math.hypot(this.vx, this.vz) < 0.002) { this.vx = 0; this.vz = 0; }
+      // 停止中もカーソルの方向へ体を向ける
+      if (this.cursorAngle !== null) this.player.rotation.y = this.cursorAngle;
     }
 
     if (this.insideBuilding) {
@@ -1840,6 +1851,13 @@ class Game {
   followCamera() {
     if (this.lookState.up)   this.cameraPitch = Math.max(-0.15, this.cameraPitch - 0.018);
     if (this.lookState.down) this.cameraPitch = Math.min(0.80,  this.cameraPitch + 0.018);
+
+    // カーソルフォロー: カメラをカーソル方向の真後ろへ滑らかに回転
+    if (this.cursorAngle !== null) {
+      const target = this.cursorAngle + Math.PI;
+      const diff = ((target - this.cameraAngle + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+      this.cameraAngle += diff * 0.08;
+    }
 
     const px = this.player.position.x;
     const py = this.player.position.y + 1.3;
@@ -1918,6 +1936,22 @@ class Game {
     }
   }
 
+  _updateCursorFollow(clientX, clientY) {
+    const ndc = new THREE.Vector2(
+      (clientX / innerWidth) * 2 - 1,
+      -(clientY / innerHeight) * 2 + 1
+    );
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera(ndc, this.camera);
+    const ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+    const hit = new THREE.Vector3();
+    if (!ray.ray.intersectPlane(ground, hit)) return;
+    const dx = hit.x - this.player.position.x;
+    const dz = hit.z - this.player.position.z;
+    if (Math.hypot(dx, dz) < 1.5) return; // 近すぎる場合は無視
+    this.cursorAngle = Math.atan2(dx, dz);
+  }
+
   _handleTap(clientX, clientY) {
     if (this.insideBuilding) return;
     if (!document.getElementById('mining-popup').classList.contains('hidden')) return;
@@ -1973,6 +2007,7 @@ class Game {
 
   enterBuilding(def) {
     this.insideBuilding = true;
+    this.cursorAngle = null; // 建物内ではカーソルフォロー無効
     this.prevPlayerPos = this.player.position.clone();
     const ix = 200, iy = 0, iz = 200;
     const roomW = 12, roomH = 4.5, roomD = 12;
