@@ -98,6 +98,22 @@ Three.js製の3Dマイクラ風学習ゲーム。小学生（主に2年生〜6�
 - 床色・天井色も建物ごとに変更（floorCols / ceilCols マップ）
 - 壁たいまつは4本（前後壁×各2）、torch用PointLight付き
 
+### ワールド自動拡張（World Expansion）
+- `WORLD_ZONES`: 4ゾーン定義（zone2〜zone5）、各ゾーンに解放条件・境界・霧密度・トーストメッセージ
+- 初期状態: bounds=28（全リソース・レインボー以外の建物を網羅）、fog=0.016
+- ゾーン解放条件:
+  - zone2（むらのはずれ）: totalItems≥5, bounds=36, fog=0.012
+  - zone3（もりのおく）: totalItems≥20, bounds=46, fog=0.009
+  - zone4（さいはての ち）: totalItems≥45 or Lv≥10, bounds=58, fog=0.005
+  - zone5（でんせつのせかい）: totalItems≥80 or Lv≥15, bounds=70, fog=0.003
+- `applyWorldZones()`: ゲーム起動時に保存済みゾーンを復元（トーストなし）
+- `checkWorldExpansion()`: `collectItem()` と `addXP()` のレベルアップ時に呼ばれ、新ゾーンをチェック
+- `expandWorld(zone)`: bounds/fog更新・デコレーション追加・トースト表示・saveState
+- `_buildZoneDecorations(zoneId)`: ゾーンごとのThree.jsオブジェクト生成（花畑・フェンス/キノコ・岩/遺跡・モノリス/クリスタル・浮遊岩）
+- `_clearZoneDecorations()`: リセット時にシーンからデコレーション削除
+- `this.zoneDecorMeshes`: ゾーンIDキーのMeshリスト（PointLightも含む）
+- レインボーゲート（z=30）はzone2解放まで境界外になる（Lv15必要なので問題なし）
+
 ### タップ移動（tap-to-move）
 - キャンバスをタップ（またはマウスクリック）するとキャラクターが自動移動
 - `this.moveTarget = { x, z, interact }` でターゲット座標を管理

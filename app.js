@@ -216,6 +216,8 @@ class Game {
     this.frame = 0;
     this.vx = 0; this.vz = 0; // velocity for smooth movement
     this.moveTarget = null; // tap-to-move target {x, z, interact}
+    this.worldBound = 28;  // 現在のプレイヤー移動範囲（ゾーン拡張で増加）
+    this.zoneDecorMeshes = {}; // ゾーンごとのデコレーションメッシュ
     this.mobs = [];
     this.fireballs = [];
     this.playerStats = {};
@@ -544,10 +546,11 @@ class Game {
           ...DEFAULT_STATE,
           ...saved,
           inventory: { ...DEFAULT_STATE.inventory, ...(saved.inventory || {}) },
+          unlockedZones: Array.isArray(saved.unlockedZones) ? saved.unlockedZones : [],
         };
       }
     } catch(e) {}
-    return { ...DEFAULT_STATE, inventory: { wood:0, stone:0, iron:0, gold:0, diamond:0 } };
+    return { ...DEFAULT_STATE, inventory: { wood:0, stone:0, iron:0, gold:0, diamond:0 }, unlockedZones: [] };
   }
 
   saveState() {
@@ -555,7 +558,10 @@ class Game {
   }
 
   resetState() {
-    this.state = { ...DEFAULT_STATE, inventory: { wood:0, stone:0, iron:0, gold:0, diamond:0 } };
+    this._clearZoneDecorations();
+    this.worldBound = 28;
+    if (this.scene && this.scene.fog) this.scene.fog.density = 0.016;
+    this.state = { ...DEFAULT_STATE, inventory: { wood:0, stone:0, iron:0, gold:0, diamond:0 }, unlockedZones: [] };
     this.saveState();
   }
 
@@ -751,6 +757,7 @@ class Game {
       banner.classList.remove('hidden');
       setTimeout(() => banner.classList.add('hidden'), 2500);
       this.playSe('levelup');
+      this.checkWorldExpansion();
     }
   }
 
@@ -759,7 +766,7 @@ class Game {
     const canvas = document.getElementById('game-canvas');
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x87CEEB);
-    this.scene.fog = new THREE.FogExp2(0x87CEEB, 0.012);
+    this.scene.fog = new THREE.FogExp2(0x87CEEB, 0.016);
 
     this.camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 500);
 
@@ -788,6 +795,7 @@ class Game {
     this.playerStats = this.loadStats();
     this.buildDayNightVisuals();
     this.buildWorld();
+    this.applyWorldZones();
     const savedCharId = localStorage.getItem(CHAR_STORAGE_KEY) || 'steve';
     this.currentChar = CHARACTER_DEFS.find(c=>c.id===savedCharId) || CHARACTER_DEFS[0];
     this.buildPlayer(this.currentChar);
@@ -1814,8 +1822,8 @@ class Game {
       this.player.position.x = Math.max(195, Math.min(205, this.player.position.x + this.vx));
       this.player.position.z = Math.max(195, Math.min(205, this.player.position.z + this.vz));
     } else {
-      this.player.position.x = Math.max(-48, Math.min(48, this.player.position.x + this.vx));
-      this.player.position.z = Math.max(-48, Math.min(48, this.player.position.z + this.vz));
+      this.player.position.x = Math.max(-this.worldBound, Math.min(this.worldBound, this.player.position.x + this.vx));
+      this.player.position.z = Math.max(-this.worldBound, Math.min(this.worldBound, this.player.position.z + this.vz));
     }
 
     const spd2 = Math.hypot(this.vx, this.vz);
@@ -2598,6 +2606,7 @@ class Game {
     this.saveState();
     this.updateInventoryHUD();
     this.refreshBuildings();
+    this.checkWorldExpansion();
 
     // Deplete the block
     node.depleted = true;
@@ -2629,6 +2638,163 @@ class Game {
       el.style.opacity = '0';
     });
     setTimeout(() => el.remove(), 1300);
+  }
+
+  // ===== WORLD EXPANSION =====
+  applyWorldZones() {
+    if (!this.state || !this.state.unlockedZones) return;
+    this.state.unlockedZones.forEach(id => {
+      const zone = WORLD_ZONES.find(z => z.id === id);
+      if (!zone) return;
+      this.worldBound = zone.bound;
+      this.scene.fog.density = zone.fog;
+      this._buildZoneDecorations(id);
+    });
+  }
+
+  checkWorldExpansion() {
+    if (!this.state.unlockedZones) this.state.unlockedZones = [];
+    const it = totalItems(this.state);
+    WORLD_ZONES.forEach(zone => {
+      if (this.state.unlockedZones.includes(zone.id)) return;
+      if (zone.cond(this.state, it)) this.expandWorld(zone);
+    });
+  }
+
+  expandWorld(zone) {
+    if (!this.state.unlockedZones) this.state.unlockedZones = [];
+    this.state.unlockedZones.push(zone.id);
+    this.worldBound = zone.bound;
+    this.scene.fog.density = zone.fog;
+    this._buildZoneDecorations(zone.id);
+    this.saveState();
+    this._showToast(zone.toast);
+    this.playSe('levelup');
+  }
+
+  _clearZoneDecorations() {
+    if (!this.scene || !this.zoneDecorMeshes) return;
+    Object.values(this.zoneDecorMeshes).forEach(arr => {
+      arr.forEach(m => this.scene.remove(m));
+    });
+    this.zoneDecorMeshes = {};
+  }
+
+  _buildZoneDecorations(zoneId) {
+    if (!this.zoneDecorMeshes) this.zoneDecorMeshes = {};
+    if (this.zoneDecorMeshes[zoneId]) return;
+    const meshes = [];
+    const add = m => { this.scene.add(m); meshes.push(m); };
+    const bx = (w, h, d, col, x, y, z) => {
+      const m = this.box(w, h, d, col);
+      m.position.set(x, y, z);
+      m.castShadow = true;
+      add(m);
+    };
+
+    if (zoneId === 'zone2') {
+      // Flower patches in radius 29-35
+      const flowerCols = [0xFF6680, 0xFF9900, 0xFFFF44, 0xFF44AA, 0xAA44FF, 0x44AAFF];
+      [
+        [30,0,6],[30,0,-6],[-30,0,6],[-30,0,-6],
+        [6,0,30],[-6,0,30],[6,0,-30],[-6,0,-30],
+        [25,0,22],[25,0,-20],[-25,0,22],[-25,0,-20],
+      ].forEach(([x,,z], i) => {
+        bx(0.2, 0.6, 0.2, 0x2D6A2F, x, 0.3, z);
+        bx(0.5, 0.5, 0.5, flowerCols[i % flowerCols.length], x, 0.75, z);
+      });
+      // Fence posts along z=±33
+      for (let x = -30; x <= 30; x += 3) {
+        bx(0.2, 1.2, 0.2, 0x8B5E3C, x, 0.6, 33);
+        bx(0.2, 1.2, 0.2, 0x8B5E3C, x, 0.6, -33);
+      }
+      for (let z = -30; z <= 30; z += 3) {
+        bx(0.2, 1.2, 0.2, 0x8B5E3C, 33, 0.6, z);
+        bx(0.2, 1.2, 0.2, 0x8B5E3C, -33, 0.6, z);
+      }
+      // Fence rails
+      bx(60, 0.12, 0.12, 0x8B5E3C, 0, 1.1,  33);
+      bx(60, 0.12, 0.12, 0x8B5E3C, 0, 1.1, -33);
+      bx(0.12, 0.12, 60, 0x8B5E3C,  33, 1.1, 0);
+      bx(0.12, 0.12, 60, 0x8B5E3C, -33, 1.1, 0);
+      // Extra trees at zone 2 boundary
+      [[31,14],[31,-14],[-31,14],[-31,-14],[14,31],[14,-31],[-14,31],[-14,-31],
+       [32,0],[-32,0],[0,32],[0,-32]].forEach(([x,z]) => this.addTree(x,z));
+    }
+
+    if (zoneId === 'zone3') {
+      // Giant mushrooms at radius 38-44
+      [[38,18],[38,-18],[-38,18],[-38,-18],[18,38],[18,-38],[-18,38],[-18,-38],
+       [42,5],[-42,5],[5,42],[-5,42]].forEach(([x,z], i) => {
+        const h = 2.5 + (i % 3) * 0.8;
+        bx(0.5, h, 0.5, 0x5C3A1E, x, h/2, z);
+        bx(2.8, 0.8, 2.8, i % 2 === 0 ? 0xCC2222 : 0x884400, x, h + 0.4, z);
+        bx(0.4, 0.12, 0.4, 0xFFFFFF, x, h + 0.85, z);
+      });
+      // Boulder clusters
+      [[40,-10],[-40,-10],[40,10],[-40,10],[12,42],[-12,42],[12,-42],[-12,-42]].forEach(([x,z]) => {
+        bx(1.8, 1.2, 1.8, 0x666666, x,     0.6,  z);
+        bx(1.2, 0.9, 1.2, 0x777777, x+0.8, 0.45, z+0.6);
+        bx(0.9, 0.7, 0.9, 0x888888, x-0.5, 0.35, z-0.5);
+      });
+      // Dense trees
+      [[36,8],[36,-8],[-36,8],[-36,-8],[8,36],[8,-36],[-8,36],[-8,-36],
+       [40,16],[40,-16],[-40,16],[-40,-16],[20,40],[20,-40],[-20,40],[-20,-40]].forEach(([x,z]) => this.addTree(x,z));
+    }
+
+    if (zoneId === 'zone4') {
+      // Ancient ruins at radius 48-56
+      [[50,12],[50,-12],[-50,12],[-50,-12],[12,50],[-12,50],[12,-50],[-12,-50]].forEach(([x,z]) => {
+        bx(4.0, 2.5, 0.6, 0x888870, x,     1.25, z);
+        bx(0.6, 3.5, 4.0, 0x888870, x+2.5, 1.75, z);
+        bx(1.2, 1.0, 0.6, 0x888870, x-1.0, 3.0,  z);
+        bx(0.6, 0.6, 0.6, 0x777760, x+1.5, 0.3,  z+1.5);
+        bx(0.4, 0.4, 0.4, 0x777760, x-2.0, 0.2,  z-1.0);
+      });
+      // Stone monoliths
+      [[54,0],[-54,0],[0,54],[0,-54],[48,22],[48,-22],[-48,22],[-48,-22]].forEach(([x,z], i) => {
+        const h = 4 + (i % 3) * 1.5;
+        bx(0.8, h,   0.8, 0x667766, x, h/2,  z);
+        bx(1.2, 0.3, 1.2, 0x557755, x, h+0.15, z);
+      });
+      // Ground patches (sand-colored)
+      [[52,8],[52,-8],[-52,8],[-52,-8],[8,52],[-8,52],[8,-52],[-8,-52]].forEach(([x,z]) => {
+        bx(6, 0.08, 6, 0xC8A870, x, 0.04, z);
+      });
+    }
+
+    if (zoneId === 'zone5') {
+      // Crystal formations at radius 60-68
+      const crystalCols = [0x44DDFF, 0xFF44FF, 0x44FF88, 0xFFFF44, 0xFF8844, 0xFF4444];
+      [[62,10],[62,-10],[-62,10],[-62,-10],[10,62],[-10,62],[10,-62],[-10,-62],
+       [60,26],[60,-26],[-60,26],[-60,-26]].forEach(([x,z], i) => {
+        const col = crystalCols[i % crystalCols.length];
+        const mat = new THREE.MeshLambertMaterial({ color: col, emissive: col, emissiveIntensity: 0.4 });
+        const h = 3 + (i % 4) * 0.8;
+        const main = new THREE.Mesh(new THREE.BoxGeometry(0.5, h, 0.5), mat);
+        main.position.set(x, h/2, z);
+        add(main);
+        [[-0.8,0.6],[0.6,-0.7],[-0.5,-0.8]].forEach(([dx,dz]) => {
+          const sh = h * 0.6;
+          const sm = new THREE.Mesh(new THREE.BoxGeometry(0.3, sh, 0.3), mat);
+          sm.position.set(x+dx, sh/2, z+dz);
+          add(sm);
+        });
+        const pl = new THREE.PointLight(col, 0.8, 12);
+        pl.position.set(x, 3, z);
+        this.scene.add(pl);
+        meshes.push(pl);
+      });
+      // Floating rocks
+      [[65,0],[-65,0],[0,65],[0,-65],[58,32],[58,-32],[-58,32],[-58,-32]].forEach(([x,z], i) => {
+        const s = 1.5 + (i % 3) * 0.5;
+        const y = 5 + (i % 4);
+        bx(s,     s*0.6, s,     0x666688, x,        y,        z);
+        bx(s*0.7, s*0.4, s*0.7, 0x777799, x+s*0.3, y+s*0.4,  z+s*0.2);
+      });
+    }
+
+    this.zoneDecorMeshes[zoneId] = meshes;
   }
 
   updateInventoryHUD() {
