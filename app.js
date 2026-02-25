@@ -1952,38 +1952,532 @@ class Game {
     const ix = 200, iy = 0, iz = 200;
     const roomW = 12, roomH = 4.5, roomD = 12;
     const g = new THREE.Group();
-    const wallMat = new THREE.MeshLambertMaterial({ color: def.color });
-    const floorMat = new THREE.MeshLambertMaterial({ color: 0x888866 });
-    const ceilMat  = new THREE.MeshLambertMaterial({ color: 0xbbbbbb });
-    // Floor
-    g.add(this._makeMesh(new THREE.BoxGeometry(roomW, 0.2, roomD), floorMat, 0, 0.1, 0));
-    // Ceiling
-    g.add(this._makeMesh(new THREE.BoxGeometry(roomW, 0.2, roomD), ceilMat, 0, roomH, 0));
-    // Walls (N, S, W, E)
-    g.add(this._makeMesh(new THREE.BoxGeometry(roomW, roomH, 0.2), wallMat, 0, roomH/2, -roomD/2));
-    g.add(this._makeMesh(new THREE.BoxGeometry(roomW, roomH, 0.2), wallMat, 0, roomH/2,  roomD/2));
-    g.add(this._makeMesh(new THREE.BoxGeometry(0.2, roomH, roomD), wallMat, -roomW/2, roomH/2, 0));
-    g.add(this._makeMesh(new THREE.BoxGeometry(0.2, roomH, roomD), wallMat,  roomW/2, roomH/2, 0));
-    // Simple furniture
-    const tableMat = new THREE.MeshLambertMaterial({ color: 0x8B5E3C });
-    g.add(this._makeMesh(new THREE.BoxGeometry(1.6, 0.1, 0.9), tableMat, 0, 1.0, -1.5));
-    g.add(this._makeMesh(new THREE.BoxGeometry(0.1, 1.0, 0.1), tableMat, 0, 0.5, -1.5));
-    // Chest
-    const chestMat = new THREE.MeshLambertMaterial({ color: 0x8B6914 });
-    g.add(this._makeMesh(new THREE.BoxGeometry(0.8, 0.6, 0.5), chestMat, 2, 0.3, 2));
-    // Interior light
-    const light = new THREE.PointLight(0xffe8c0, 1.2, 12);
-    light.position.set(0, roomH - 0.5, 0);
-    g.add(light);
+
+    // Floor color per building
+    const floorCols = {
+      cabin:0x8B5E3C, tanbo:0x6B8B3C, mine:0x606060, market:0x888878,
+      well:0x607090,  onsen:0x4A7090, forge:0x505050, shrine:0x887060,
+      guild:0x706860, garden:0x559944, tower:0x686868, library:0x5C3A28,
+      port:0x665544,  castle:0x888888, dragon:0x442222, sky:0xCCDDFF, rainbow:0xD8C8FF
+    };
+    const floorCol = floorCols[def.id] || 0x888866;
+    const ceilCols = {
+      dragon:0x331111, sky:0xAABBEE, rainbow:0xBBAEFF, onsen:0x607888, shrine:0x6A4838
+    };
+    const ceilCol = ceilCols[def.id] || 0xBBBBBB;
+
+    const wallMat  = new THREE.MeshLambertMaterial({ color: def.color });
+    const floorMat = new THREE.MeshLambertMaterial({ color: floorCol });
+    const ceilMat  = new THREE.MeshLambertMaterial({ color: ceilCol });
+
+    // Floor / Ceiling / Walls
+    g.add(this._makeMesh(new THREE.BoxGeometry(roomW,0.2,roomD), floorMat, 0,0.1,0));
+    g.add(this._makeMesh(new THREE.BoxGeometry(roomW,0.2,roomD), ceilMat,  0,roomH,0));
+    g.add(this._makeMesh(new THREE.BoxGeometry(roomW,roomH,0.2), wallMat,  0,roomH/2,-roomD/2));
+    g.add(this._makeMesh(new THREE.BoxGeometry(roomW,roomH,0.2), wallMat,  0,roomH/2, roomD/2));
+    g.add(this._makeMesh(new THREE.BoxGeometry(0.2,roomH,roomD), wallMat, -roomW/2,roomH/2,0));
+    g.add(this._makeMesh(new THREE.BoxGeometry(0.2,roomH,roomD), wallMat,  roomW/2,roomH/2,0));
+
+    // Wall torches (all rooms)
+    const addTorch = (x, y, z) => {
+      const bm = (w,h,d,c,tx,ty,tz) => {
+        const m = this.box(w,h,d,c); m.position.set(tx,ty,tz); g.add(m);
+      };
+      bm(0.15,0.5,0.15, 0x8B5E3C, x,y+0.25,z);
+      bm(0.22,0.22,0.22, 0xFF8800, x,y+0.6,z);
+      const tl = new THREE.PointLight(0xFFA040,0.6,5);
+      tl.position.set(x,y+0.7,z); g.add(tl);
+    };
+    addTorch(-2, 1.6, -roomD/2+0.2);
+    addTorch( 2, 1.6, -roomD/2+0.2);
+    addTorch(-2, 1.6,  roomD/2-0.2);
+    addTorch( 2, 1.6,  roomD/2-0.2);
+
+    // Overhead light
+    const overhead = new THREE.PointLight(0xffe8c0, 0.7, 15);
+    overhead.position.set(0, roomH-0.4, 0);
+    g.add(overhead);
+
+    // Building-specific interior
+    this._buildInterior(def, g);
+
     g.position.set(ix, iy, iz);
     this.scene.add(g);
     this.interiorGroup = g;
-    this.player.position.set(ix, 1, iz + 2);
+    this.player.position.set(ix, 1, iz+2);
     this.vx = 0; this.vz = 0;
     document.getElementById('btn-exit-building').classList.remove('hidden');
     document.getElementById('interact-hint').classList.add('hidden');
     document.getElementById('building-popup').classList.add('hidden');
     document.getElementById('btn-interact').classList.add('hidden');
+  }
+
+  _buildInterior(def, g) {
+    // Shorthand: box mesh positioned and added to g
+    const bm = (w,h,d,col,x,y,z) => {
+      const m = this.box(w,h,d,col); m.position.set(x,y,z); g.add(m); return m;
+    };
+    const pl = (col,intensity,dist,x,y,z) => {
+      const l = new THREE.PointLight(col,intensity,dist); l.position.set(x,y,z); g.add(l);
+    };
+
+    // ---- Common furniture helpers ----
+    const chest = (x,y,z) => {
+      bm(1.0,0.65,0.65, 0x8B6914, x,y+0.33,z);
+      bm(1.0,0.22,0.65, 0x6B4910, x,y+0.76,z);
+      bm(0.22,0.2,0.05, 0xFFD700, x,y+0.5,z-0.34);
+    };
+    const craftTable = (x,y,z) => {
+      bm(1.0,1.0,1.0, 0x8B5E3C, x,y+0.5,z);
+      bm(1.02,0.05,1.02, 0x5C3A1E, x,y+1.02,z);
+      bm(0.08,0.06,1.02, 0xAA7040, x,y+1.05,z);
+      bm(1.02,0.06,0.08, 0xAA7040, x,y+1.05,z);
+    };
+    const furnace = (x,y,z) => {
+      bm(1.0,1.0,1.0, 0x888888, x,y+0.5,z);
+      bm(0.5,0.4,0.05, 0x444444, x,y+0.5,z-0.53);
+      bm(0.3,0.2,0.06, 0xFF5500, x,y+0.35,z-0.53);
+      pl(0xFF4400,0.5,3, x,y+0.8,z);
+    };
+    const bookshelf = (x,y,z) => {
+      bm(1.0,1.0,0.4, 0x8B5E3C, x,y+0.5,z);
+      const bc = [0xFF4444,0x4466FF,0x44AA44,0xFF8800,0x9944AA,0xFFFF44];
+      for(let i=0;i<6;i++) bm(0.12,0.65,0.32, bc[i], x-0.42+i*0.17,y+0.52,z);
+    };
+    const bed = (x,y,z,col) => {
+      bm(1.0,0.3,2.2, 0x8B5E3C, x,y+0.15,z);
+      bm(0.9,0.2,1.6, col, x,y+0.4,z+0.3);
+      bm(0.72,0.16,0.32, 0xEEEEEE, x,y+0.4,z-0.85);
+      bm(1.0,0.55,0.15, 0x8B5E3C, x,y+0.43,z-1.1); // headboard
+    };
+    const tableLegs = (x,y,z) => {
+      bm(1.8,0.12,1.0, 0x8B5E3C, x,y+1.0,z);
+      [[-0.82,-0.42],[0.82,-0.42],[-0.82,0.42],[0.82,0.42]]
+        .forEach(([lx,lz]) => bm(0.1,1.0,0.1, 0x6B4A2E, x+lx,y+0.5,z+lz));
+    };
+    const barrel = (x,y,z) => {
+      bm(0.8,0.9,0.8, 0x6B4A2E, x,y+0.45,z);
+      bm(0.82,0.05,0.82, 0x888855, x,y+0.2,z);
+      bm(0.82,0.05,0.82, 0x888855, x,y+0.7,z);
+    };
+    const anvil = (x,y,z) => {
+      bm(0.4,0.3,0.5, 0x555555, x,y+0.15,z);
+      bm(0.7,0.1,0.5, 0x555555, x,y+0.35,z);
+      bm(0.9,0.3,0.5, 0x666666, x,y+0.5,z);
+    };
+    const banner = (x,y,z,col) => {
+      bm(0.1,0.2,0.1, 0x8B5E3C, x,y+3.6,z);
+      bm(0.8,1.6,0.06, col, x,y+2.55,z);
+    };
+    const flowerPot = (x,y,z,col) => {
+      bm(0.35,0.3,0.35, 0x886644, x,y+0.15,z);
+      bm(0.16,0.4,0.16, 0x228B22, x,y+0.55,z);
+      bm(0.26,0.18,0.26, col, x,y+0.87,z);
+    };
+    const lantern = (x,y,z) => {
+      bm(0.45,0.6,0.45, 0xFF8800, x,y+0.3,z);
+      bm(0.5,0.08,0.5, 0x555555, x,y+0.64,z);
+      bm(0.5,0.08,0.5, 0x555555, x,y-0.0,z);
+      pl(0xFF8800,0.6,4, x,y+0.4,z);
+    };
+
+    switch(def.id) {
+
+      case 'cabin':
+        bed(-3,0,-2, 0x4466AA);
+        craftTable(3,0,-3);
+        furnace(3,0,-1.5);
+        chest(-4,0,3); chest(-3,0,3);
+        // Window frame on west wall
+        bm(1.6,1.4,0.08, 0xCCDDFF, -5.85,2.0,0);
+        bm(0.08,1.4,0.08, 0x8B5E3C, -5.82,2.0,0);
+        bm(1.6,0.08,0.08, 0x8B5E3C, -5.82,2.0,0);
+        break;
+
+      case 'tanbo':
+        // Hay bales
+        bm(1.0,1.0,1.0, 0xC8AA44, -3,0.5,-3);
+        bm(1.0,1.0,1.0, 0xC8AA44, -3,0.5,-2);
+        bm(1.0,1.0,1.0, 0xB8993A,  2,0.5,-3);
+        bm(1.0,1.0,1.0, 0xB8993A,  2,0.5,-2);
+        // Hay binding stripes
+        bm(1.02,0.06,1.02, 0x887722, -3,0.5,-3);
+        barrel(3,0,2);
+        // Hoe on wall (stick + head)
+        bm(0.1,2.8,0.1, 0x8B5E3C, -5.5,1.4,-5.5);
+        bm(0.55,0.1,0.35, 0x8B5E3C, -5.5,2.9,-5.4);
+        // Sacks
+        bm(0.7,0.7,0.7, 0xBBAA88,  0,0.35,3);
+        bm(0.7,0.7,0.7, 0xBBAA88,  1,0.35,3);
+        bm(0.7,0.55,0.7, 0xAA9977, -1,0.28,3);
+        // Water trough
+        bm(2.5,0.3,0.8, 0x8B5E3C, -1,0.15,-4.5);
+        bm(2.5,0.1,0.6, 0x4477AA, -1,0.32,-4.5);
+        break;
+
+      case 'mine':
+        // Ore display wall
+        bm(1,1,1, 0x666666, -4,0.5,-4.5); // stone
+        bm(1,1,1, 0x8B6914, -2,0.5,-4.5); // gold ore
+        bm(1,1,1, 0x44BBFF, -0,0.5,-4.5); // diamond
+        bm(1,1,1, 0xC86028,  2,0.5,-4.5); // iron
+        bm(1,1,1, 0x55AA55,  4,0.5,-4.5); // emerald
+        // Pickaxe on wall
+        bm(0.1,2.2,0.1, 0x8B5E3C, 5.5,1.1,-5.5);
+        bm(1.1,0.18,0.22, 0x888888, 5.5,2.3,-5.4);
+        // Minecart
+        bm(1.4,0.6,0.9, 0x888888, 0,0.3,2);
+        bm(0.3,0.18,0.3, 0x444444, -0.45,0.09,2.3);
+        bm(0.3,0.18,0.3, 0x444444,  0.45,0.09,2.3);
+        bm(0.3,0.18,0.3, 0x444444, -0.45,0.09,1.7);
+        bm(0.3,0.18,0.3, 0x444444,  0.45,0.09,1.7);
+        // Rail segment
+        bm(3.0,0.05,0.12, 0x888888, 0,0.02,2);
+        bm(0.12,0.05,1.0, 0x888888, -0.6,0.02,2);
+        bm(0.12,0.05,1.0, 0x888888,  0.6,0.02,2);
+        chest(4,0,-2); chest(4,0,-1);
+        // Extra torch on ore wall
+        bm(0.15,0.45,0.15, 0x8B5E3C, 0,1.55,-4.3);
+        bm(0.2,0.2,0.2, 0xFF8800, 0,1.82,-4.3);
+        pl(0xFFA040,0.5,4, 0,1.9,-4.3);
+        break;
+
+      case 'market':
+        tableLegs(-2,0,-2); tableLegs(2,0,-2);
+        barrel(-4,0,2); barrel(-3,0,2); barrel(3,0,3);
+        // Wall shelves
+        bm(5.0,0.1,0.5, 0x8B5E3C, -1,2.2,-5.5);
+        bm(5.0,0.1,0.5, 0x8B5E3C, -1,1.3,-5.5);
+        bm(2.5,0.1,0.5, 0x8B5E3C,  4,2.2,-5.5);
+        // Goods on shelves
+        [0xDD4444,0x44BB44,0xFFAA00,0x8844CC,0x44CCCC].forEach((c,i) => {
+          bm(0.4,0.5,0.3, c, -3.5+i*1.2,2.5,-5.4);
+          bm(0.35,0.4,0.3, c, -3.3+i*1.2,1.6,-5.4);
+        });
+        // Counter
+        bm(5.5,0.12,1.0, 0x8B5E3C, 0,1.1,0.8);
+        bm(5.5,1.1,0.12, 0x8B5E3C, 0,0.55,1.35);
+        // Sign above door
+        bm(2.2,0.8,0.07, 0xE8C870, 0,3.5,5.85);
+        break;
+
+      case 'well':
+        // Stone well surround
+        bm(2.0,0.5,2.0, 0x888880, 0,0.25,0);
+        bm(2.0,0.15,2.0, 0x4466AA, 0,0.52,0); // water
+        bm(0.2,1.8,0.2, 0x8B5E3C, -0.7,1.2,0);
+        bm(0.2,1.8,0.2, 0x8B5E3C,  0.7,1.2,0);
+        bm(1.6,0.2,0.2, 0x8B5E3C, 0,2.2,0);
+        // Rope
+        bm(0.06,1.0,0.06, 0xAA9966, 0,1.1,0);
+        // Buckets
+        bm(0.42,0.4,0.42, 0x888888, -3,0.2,2);
+        bm(0.42,0.4,0.42, 0x888888, -2,0.2,2);
+        bm(0.42,0.4,0.42, 0x4466AA, -2.5,0.2,0.5); // full bucket
+        // Stone ring
+        for(let i=0;i<8;i++) {
+          const a=i*Math.PI/4, r=2.3;
+          bm(0.55,0.45,0.55, 0x888880, Math.cos(a)*r,0.22,Math.sin(a)*r);
+        }
+        pl(0x88AAFF,0.5,5, 0,0.8,0);
+        break;
+
+      case 'onsen':
+        // Hot spring pool
+        bm(4.5,0.12,4.5, 0x4A90C0, 0,0.06,0);
+        // Pool walls
+        bm(0.5,0.5,4.5, 0x668899, -2.5,0.25,0);
+        bm(0.5,0.5,4.5, 0x668899,  2.5,0.25,0);
+        bm(4.5,0.5,0.5, 0x668899, 0,0.25,-2.5);
+        bm(4.5,0.5,0.5, 0x668899, 0,0.25, 2.5);
+        // Steam (light translucent boxes)
+        [[-0.8,0.5],[0.8,-0.6],[-0.5,-0.8],[0.6,0.8]].forEach(([sx,sz]) => {
+          bm(0.35,0.35,0.35, 0xDDEEFF, sx,0.9,sz);
+          bm(0.25,0.25,0.25, 0xEEF4FF, sx*0.6,1.4,sz*0.6);
+        });
+        pl(0x88AADD,0.8,7, 0,0.5,0);
+        // Rock seats
+        bm(1.2,0.55,0.7, 0x777777, -4.5,0.28,0);
+        bm(1.2,0.55,0.7, 0x777777,  4.5,0.28,0);
+        bm(0.7,0.55,1.2, 0x888888, 0,0.28,-4.5);
+        // Bamboo
+        bm(0.22,3.8,0.22, 0x668833,  5.2,1.9,-4.8);
+        bm(0.22,3.2,0.22, 0x558822,  4.5,1.6,-4.8);
+        bm(0.22,3.4,0.22, 0x669944, -5.2,1.7,-4.8);
+        // Towel folded on edge
+        bm(0.9,0.1,0.4, 0xFF8888, -4.5,0.58,-0.6);
+        lantern(-4,0,3); lantern(4,0,3);
+        break;
+
+      case 'forge':
+        furnace(-3,0,-4); furnace(-2,0,-4);
+        anvil(0,0,-1);
+        chest(4,0,-4); chest(4,0,-3);
+        // Sword on west wall
+        bm(0.1,2.8,0.1, 0xCCCCCC, -5.7,1.4,-2);
+        bm(0.7,0.12,0.2, 0x8B5E3C, -5.7,0.6,-2);
+        bm(0.3,0.3,0.3, 0xFFD700, -5.7,0.95,-2); // pommel
+        // Shield on north wall
+        bm(1.0,1.2,0.08, 0xCC2200, 3,2.2,-5.8);
+        bm(0.08,1.2,0.08, 0xFFD700, 3,2.2,-5.76);
+        bm(1.0,0.08,0.08, 0xFFD700, 3,1.7,-5.76);
+        bm(1.0,0.08,0.08, 0xFFD700, 3,2.7,-5.76);
+        // Coal pile
+        bm(1.2,0.3,0.8, 0x333333, -3,0.15,2);
+        bm(0.6,0.4,0.5, 0x222222, -3.3,0.35,2);
+        // Workbench
+        tableLegs(2,0,2);
+        break;
+
+      case 'shrine':
+        // Torii gate
+        bm(0.45,4.2,0.45, 0xCC2200, -3,2.1,-4.5);
+        bm(0.45,4.2,0.45, 0xCC2200,  3,2.1,-4.5);
+        bm(7.0,0.35,0.45, 0xCC2200, 0,3.8,-4.5);
+        bm(6.5,0.35,0.45, 0xCC2200, 0,3.3,-4.5);
+        // Offering box
+        bm(1.4,0.9,0.9, 0x6B4A2E, 0,0.45,-3.5);
+        bm(1.4,0.12,0.9, 0x5C3A1E, 0,0.92,-3.5);
+        bm(0.6,0.25,0.05, 0x888888, 0,0.65,-4.0); // coin slot
+        // Prayer mat
+        bm(1.4,0.06,0.9, 0xDD4444, 0,0.06,-1.5);
+        bm(1.2,0.04,0.06, 0xFFD700, 0,0.08,-1.05);
+        bm(1.2,0.04,0.06, 0xFFD700, 0,0.08,-1.95);
+        // Lanterns
+        lantern(-3,0,2); lantern(3,0,2);
+        // Shimenawa rope
+        bm(6.5,0.12,0.12, 0xDDCC88, 0,3.1,5.7);
+        bm(0.12,0.4,0.12, 0xEEDD99, -2,2.75,5.7);
+        bm(0.12,0.4,0.12, 0xEEDD99,  2,2.75,5.7);
+        break;
+
+      case 'guild':
+        // Notice board
+        bm(3.2,2.2,0.12, 0x8B5E3C, 0,2.1,-5.8);
+        bm(3.0,2.0,0.08, 0xE8D8A0, 0,2.1,-5.75);
+        bm(0.7,0.9,0.06, 0xFFFFFF, -0.9,2.3,-5.72);
+        bm(0.7,0.9,0.06, 0xFFFFF0,  0.5,2.4,-5.72);
+        bm(0.5,0.6,0.06, 0xFFEEEE,  -0.3,1.8,-5.72);
+        // Tables
+        tableLegs(-3,0,-1); tableLegs(1,0,-1); tableLegs(-3,0,2);
+        // Trophy
+        bm(0.32,0.7,0.32, 0xFFD700, 4.5,0.35,-4.5);
+        bm(0.55,0.1,0.55, 0x888850, 4.5,0.05,-4.5);
+        bm(0.12,0.35,0.12, 0xFFD700, 4.5,0.82,-4.5);
+        bm(0.5,0.22,0.22, 0xFFD700, 4.5,0.98,-4.5);
+        // Weapon rack
+        bm(1.2,0.1,0.6, 0x8B5E3C, -4.5,2.6,-5.6);
+        bm(0.1,2.2,0.1, 0x888888, -4.0,1.5,-5.6);
+        bm(0.1,2.2,0.1, 0x888888, -5.0,1.5,-5.6);
+        // Banners
+        banner(-5,0,-5, 0x224488);
+        banner( 5,0,-5, 0x224488);
+        break;
+
+      case 'garden':
+        // Flower pots on floor
+        flowerPot(-4,0,-3, 0xFF4466); flowerPot(-2.8,0,-3, 0xFFAA00);
+        flowerPot(-1.6,0,-3, 0xFF6699); flowerPot(-0.4,0,-3, 0xFFFF00);
+        flowerPot(0.8,0,-3, 0xFF6688);  flowerPot(2.0,0,-3, 0xAA44FF);
+        // Wall shelf
+        bm(4.5,0.1,0.35, 0x8B5E3C, -1.5,1.9,-5.5);
+        bm(0.1,1.5,0.35, 0x8B5E3C, -3.8,1.15,-5.5);
+        bm(0.1,1.5,0.35, 0x8B5E3C,  0.8,1.15,-5.5);
+        // Pots on shelf
+        flowerPot(-3,1.88,-5.3, 0xFF88AA);
+        flowerPot(-2,1.88,-5.3, 0xFFCC00);
+        flowerPot(-1,1.88,-5.3, 0x88FF88);
+        flowerPot( 0,1.88,-5.3, 0xFF6644);
+        // Bench
+        bm(3.2,0.1,0.75, 0x8B5E3C, -1.5,0.72,2.5);
+        bm(0.15,0.72,0.65, 0x8B5E3C, -3.1,0.36,2.5);
+        bm(0.15,0.72,0.65, 0x8B5E3C,  0.1,0.36,2.5);
+        // Watering can
+        bm(0.55,0.62,0.35, 0x888888, 3.5,0.31,2.5);
+        bm(0.16,0.16,0.65, 0x888888, 3.5,0.7,2.2);
+        // Soil patches
+        bm(1.5,0.06,1.0, 0x6B4A2E, 3.5,0.06,-2);
+        bm(1.5,0.06,1.0, 0x6B4A2E, 3.5,0.06,-3.5);
+        break;
+
+      case 'tower':
+        // Ladder (side rails + rungs)
+        bm(0.08,4.2,0.08, 0x8B5E3C,  4.2,2.1,-5.5);
+        bm(0.08,4.2,0.08, 0x8B5E3C,  4.8,2.1,-5.5);
+        for(let i=0;i<7;i++) bm(0.55,0.08,0.08, 0x8B5E3C, 4.5,0.4+i*0.6,-5.5);
+        // Window (bright slit on west wall)
+        bm(1.8,2.2,0.08, 0xCCDDFF, -5.88,2.0,0);
+        bm(0.08,2.2,0.08, 0x555555, -5.84,2.0,0);
+        bm(1.8,0.08,0.08, 0x555555, -5.84,2.0,0);
+        pl(0xCCEEFF,0.4,5, -5.5,2.0,0);
+        // Telescope
+        bm(0.22,0.22,1.8, 0x888888, -2.5,1.5,-2.5);
+        bm(0.35,0.35,0.18, 0x888888, -2.5,1.5,-3.4);
+        bm(0.18,0.18,0.18, 0x4466AA, -2.5,1.5,-3.55);
+        // Tripod legs
+        bm(0.08,1.0,0.08, 0x8B5E3C, -2.8,0.5,-2.5);
+        bm(0.08,1.0,0.08, 0x8B5E3C, -2.2,0.5,-2.5);
+        bm(0.08,1.0,0.08, 0x8B5E3C, -2.5,0.5,-2.8);
+        // Map table
+        tableLegs(0,0,1);
+        bm(1.6,0.05,1.0, 0xE8D8A0, 0,1.07,1); // map on table
+        chest(-4,0,3.5);
+        break;
+
+      case 'library':
+        // Bookshelves lining back wall
+        for(let i=0;i<5;i++) bookshelf(-4.5+i*2,0,-5.5);
+        // Second tier of shelves
+        for(let i=0;i<5;i++) {
+          bm(1.0,1.0,0.4, 0x8B5E3C, -4.5+i*2,1.1,-5.5);
+          const bc=[0xFF4444,0x4466FF,0x44AA44,0xFF8800,0x9944AA,0xFFFF44];
+          for(let j=0;j<6;j++) bm(0.12,0.65,0.32, bc[j], -4.5+i*2-0.42+j*0.17,1.62,-5.5);
+        }
+        // Side bookshelf
+        for(let i=0;i<2;i++) {
+          const bs = this.box(0.4,1.0,1.0,0x8B5E3C);
+          bs.position.set(-5.5,0.5,-2.5+i*2.5); g.add(bs);
+          const bc=[0xFF4444,0x4466FF,0x44AA44,0xFF8800,0x9944AA,0xFFFF44];
+          for(let j=0;j<6;j++) {
+            const bk=this.box(0.32,0.65,0.12,bc[j]);
+            bk.position.set(-5.5,-2.5+i*2.5+(-0.42+j*0.17),0.52); g.add(bk);
+          }
+        }
+        // Reading tables
+        tableLegs(0,0,-1); tableLegs(2,0,2);
+        // Lectern
+        bm(0.85,1.1,0.65, 0x6B4A2E, -3,0.55,2.5);
+        bm(0.85,0.1,0.75, 0x8B5E3C, -3,1.16,2.4);
+        bm(0.7,0.05,0.55, 0xF0E8D0, -3,1.22,2.4); // open book
+        // Candles
+        bm(0.15,0.55,0.15, 0xFFEE88, 0.7,1.16,-0.5);
+        bm(0.15,0.45,0.15, 0xFFEE88, -0.7,1.16,-0.5);
+        bm(0.2,0.2,0.2, 0xFF8800, 0.7,1.44,-0.5);
+        bm(0.2,0.2,0.2, 0xFF8800, -0.7,1.44,-0.5);
+        pl(0xFFDD80,0.5,4, 0,2.0,-0.5);
+        break;
+
+      case 'port':
+        barrel(-4,0,-3); barrel(-3,0,-3); barrel(-4,0,-2);
+        barrel(3,0,-3);  barrel(3,0,-2);  barrel(4,0,-2);
+        // Anchor
+        bm(0.16,2.2,0.16, 0x888888, 0,1.1,-4);
+        bm(2.2,0.16,0.16, 0x888888, 0,0.35,-4);
+        bm(0.55,0.55,0.16, 0x888888, -1.0,0.2,-4);
+        bm(0.55,0.55,0.16, 0x888888,  1.0,0.2,-4);
+        bm(0.35,0.35,0.16, 0x888888, 0,2.3,-4); // ring
+        // Fishing net on wall
+        bm(3.5,2.5,0.07, 0x998855, 3,1.8,-5.8);
+        bm(3.4,0.07,0.07, 0x887744, 3,0.6,-5.78);
+        bm(3.4,0.07,0.07, 0x887744, 3,1.2,-5.78);
+        bm(3.4,0.07,0.07, 0x887744, 3,1.8,-5.78);
+        bm(3.4,0.07,0.07, 0x887744, 3,2.4,-5.78);
+        // Fish on table
+        tableLegs(-2,0,-1);
+        bm(0.6,0.22,0.18, 0xFF8844, -2.5,1.08,-1.5);
+        bm(0.6,0.22,0.18, 0x4488FF, -1.5,1.08,-1.5);
+        bm(0.55,0.2,0.16, 0xFF4444, -2.0,1.08,-0.5);
+        // Rope coil
+        bm(0.9,0.22,0.9, 0xAA9966, 4,0.11,3);
+        break;
+
+      case 'castle':
+        // Throne
+        bm(1.2,0.55,1.2, 0x777777, 0,0.28,-4.5);
+        bm(1.2,2.2,0.2,  0x777777, 0,1.6,-4.95);
+        bm(1.6,0.35,0.2,  0x888888, 0,3.0,-4.95);
+        bm(1.22,0.1,1.22, 0xFFD700, 0,0.58,-4.5); // gold seat
+        bm(1.22,0.1,0.22, 0xFFD700, 0,2.98,-4.93); // gold top
+        // Pillars (4 corners)
+        [[-4.5,-4.5],[4.5,-4.5],[-4.5,4.5],[4.5,4.5]].forEach(([px,pz]) => {
+          bm(0.65,4.6,0.65, 0x888888, px,2.3,pz);
+          bm(0.9,0.3,0.9, 0x999999, px,4.55,pz); // capital
+        });
+        // Banners
+        banner(-4,0,-5, 0xCC2200); banner(4,0,-5, 0xCC2200);
+        banner(-4,0, 5, 0xCC2200); banner(4,0, 5, 0xCC2200);
+        bm(0.82,0.14,0.07, 0xFFD700, -4,2.55,-5.02);
+        bm(0.82,0.14,0.07, 0xFFD700,  4,2.55,-5.02);
+        chest(-4,0,4); chest(-3,0,4); chest(3,0,4);
+        pl(0xFFD080,0.8,10, 0,3.0,0);
+        break;
+
+      case 'dragon':
+        // Treasure pile
+        [[-1.2,0],[0,0],[1.2,0],[-0.6,0.7],[0.6,0.7],[0,1.35]].forEach(([gx,gy]) => {
+          bm(0.85,0.85,0.85, 0xFFD700, -3+gx,gy+0.42,-3);
+        });
+        bm(0.55,0.55,0.55, 0x44BBFF, -3,1.5,-3);
+        bm(0.55,0.55,0.55, 0x44BBFF, -1.6,0.95,-3);
+        bm(0.55,0.55,0.55, 0xFF44AA, -3.5,0.45,-3);
+        // Lava pool
+        bm(3.5,0.12,3.5, 0xFF4400, 2.5,0.06,0.5);
+        bm(3.5,0.08,3.5, 0xFF8800, 2.5,0.1,0.5); // brighter surface
+        pl(0xFF3300,1.5,9, 2.5,0.5,0.5);
+        // Dragon skull
+        bm(1.8,1.6,1.8, 0xDDDDCC,  2,0.8,-4);
+        bm(0.45,0.45,0.32, 0x111111, 1.4,0.95,-4.92); // eye L
+        bm(0.45,0.45,0.32, 0x111111, 2.6,0.95,-4.92); // eye R
+        bm(0.8,0.32,0.32, 0x111111, 2.0,0.38,-4.92);  // jaw
+        // Dragon teeth
+        for(let i=0;i<4;i++) bm(0.12,0.3,0.12, 0xEEEECC, 1.6+i*0.28,0.14,-4.92);
+        // Bones scattered
+        bm(1.8,0.2,0.2, 0xEEEEDD, -2,0.1,-1); bm(0.2,0.2,1.4, 0xEEEEDD, -1.5,0.1,1.5);
+        bm(1.4,0.2,0.2, 0xEEEEDD,  4.5,0.1,-3);
+        // Dark ceiling glow
+        pl(0x440011,0.4,12, 0,4.0,0);
+        break;
+
+      case 'sky':
+        // Cloud blocks
+        [[-2.5,1.2,-3],[-1.2,1.5,-3],[0,1.2,-3],[1.2,1.5,-3],[2.5,1.2,-3],
+         [-1.8,2.1,-1.5],[0,2.4,-1.5],[1.8,2.1,-1.5]].forEach(([cx,cy,cz]) => {
+          bm(1.4,0.9,0.9, 0xEEEEFF, cx,cy,cz);
+        });
+        // Crystal pillar
+        bm(0.55,2.8,0.55, 0xAADDFF, 0,1.4,0);
+        bm(0.9,0.5,0.9, 0x88CCFF, 0,2.95,0);
+        bm(0.4,0.4,0.4, 0xCCEEFF, 0,3.3,0); // tip
+        pl(0x88CCFF,1.2,10, 0,2.5,0);
+        // Altar
+        bm(2.2,0.32,2.2, 0xCCDDFF, 0,0.16,-3.5);
+        bm(1.6,0.65,1.6, 0xAABBEE, 0,0.65,-3.5);
+        bm(0.55,0.55,0.55, 0x88AAFF, 0,1.1,-3.5); // offering gem
+        // Floating gems
+        bm(0.45,0.45,0.45, 0xFFAAFF, -3.5,2.2,-3);
+        bm(0.45,0.45,0.45, 0xAAFFFF,  3.5,2.0,-3);
+        bm(0.45,0.45,0.45, 0xFFFF88,  0,2.4, 3.5);
+        pl(0xCCAAFF,0.6,6, 0,1.5,-3.5);
+        break;
+
+      case 'rainbow':
+        // Colorful pillars
+        [0xFF4444,0xFF8800,0xFFFF00,0x44FF44,0x4488FF,0x8844FF].forEach((c,i) => {
+          bm(0.65,4.2,0.65, c, -3+i*1.2,2.1,-4.5);
+        });
+        // Rainbow arch
+        for(let i=0;i<9;i++) {
+          const t=i/8, a=Math.PI*t;
+          const rx=Math.cos(a)*4.5, ry=Math.sin(a)*3.0+0.4;
+          const rc=[0xFF4444,0xFF8800,0xFFFF00,0x44FF44,0x4466FF,0x8844FF,0xFF44FF][i%7];
+          bm(0.55,0.55,0.65, rc, rx,ry,1.5);
+        }
+        // End portal glow floor
+        bm(4.5,0.12,3.2, 0x220066, 0,0.07,2);
+        bm(4.3,0.08,3.0, 0x6600CC, 0,0.1,2);
+        pl(0x9900FF,1.2,9, 0,0.8,2);
+        // Stars on ceiling
+        [[-3,4.1,3],[3,4.1,3],[0,4.3,-1],[-2.5,4.2,2],[2.5,4.2,-2.5]].forEach(([sx,sy,sz]) => {
+          bm(0.32,0.32,0.32, 0xFFFFAA, sx,sy,sz);
+        });
+        pl(0xFFFF88,0.4,8, 0,4.0,0);
+        break;
+
+      default:
+        tableLegs(0,0,-1.5);
+        chest(-3,0,2); chest(-2,0,2);
+        break;
+    }
   }
 
   exitBuilding() {
