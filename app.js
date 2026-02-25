@@ -20,6 +20,7 @@ const DEFAULT_STATE = {
   inventory: { wood:0, stone:0, iron:0, gold:0, diamond:0 },
   achievements: [],
   adaptiveBias: 0,   // -2〜+2: 自動難易度オフセット（毎日更新）
+  unlockedZones: [], // ワールド拡張ゾーン
 };
 
 const inv = s => s.inventory || {};
@@ -73,6 +74,22 @@ const RESOURCE_SPAWN = [
   {type:'diamond', pos:[23, 0, -8]}, {type:'diamond', pos:[-23,0, -8]},
   {type:'diamond', pos:[11, 0, 26]}, {type:'diamond', pos:[-11,0, 26]},
   {type:'diamond', pos:[23, 0, 10]},
+];
+
+// ===== WORLD EXPANSION ZONES =====
+const WORLD_ZONES = [
+  { id:'zone2', name:'むらのはずれ',     bound:36, fog:0.012,
+    toast:'🌾 せかいが ひろがった！\nむらのはずれが かいほう！',
+    cond:(s,it)=>it>=5 },
+  { id:'zone3', name:'もりのおく',       bound:46, fog:0.009,
+    toast:'🌲 しんぴのもりを はっけん！\nさらに とおくへ すすめるよ！',
+    cond:(s,it)=>it>=20 },
+  { id:'zone4', name:'さいはての ち',    bound:58, fog:0.005,
+    toast:'🏚️ さいはての ちへ…\nいにしえの いせきが あらわれた！',
+    cond:(s,it)=>it>=45||s.level>=10 },
+  { id:'zone5', name:'でんせつのせかい', bound:70, fog:0.003,
+    toast:'🌈 でんせつのせかいが かいほう！\nすべての ちへいを たんけんせよ！',
+    cond:(s,it)=>it>=80||s.level>=15 },
 ];
 
 // ===== CHARACTER DEFINITIONS =====
