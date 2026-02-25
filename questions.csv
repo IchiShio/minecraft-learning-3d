@@ -25,3 +25,53 @@ english,2,犬は英語で？,cat,dog,bird,fish,1,犬はdogだよ,easy
 english,2,猫は英語で？,cat,dog,bird,fish,0,猫はcatだよ,easy
 english,2,赤は英語で？,blue,green,red,yellow,2,赤はredだよ,normal
 english,2,1・2・3を英語で？,one two three,a b c,red blue green,big small long,0,1はone 2はtwo 3はthreeだよ,normal
+math,2,4 ＋ 5 ＝ ？,8,9,10,11,1,4たす5は9だよ,easy
+math,2,7 ー 3 ＝ ？,3,4,5,6,1,7から3をひくと4だよ,easy
+math,2,2 × 3 ＝ ？,4,5,6,7,2,2を3かいたすと6だよ,easy
+math,2,6 ＋ 7 ＝ ？,11,12,13,14,1,6たす7は12だよ,easy
+math,2,9 ー 5 ＝ ？,3,4,5,6,1,9から5をひくと4だよ,easy
+math,2,2 × 5 ＝ ？,8,9,10,11,2,2を5かいたすと10だよ,easy
+math,2,1 × 9 ＝ ？,7,8,9,10,2,1×9＝9だよ,easy
+math,2,4 × 7 ＝ ？,24,26,28,30,2,4×7＝28だよ,normal
+math,2,6 × 8 ＝ ？,42,46,48,54,2,6×8＝48だよ,normal
+math,2,7 × 7 ＝ ？,42,46,48,49,3,7×7＝49だよ,normal
+math,2,3 × 9 ＝ ？,24,25,27,28,2,3×9＝27だよ,normal
+math,2,25 ＋ 37 ＝ ？,50,60,62,64,2,25たす37は62だよ,normal
+math,2,73 ー 28 ＝ ？,43,44,45,46,2,73から28をひくと45だよ,normal
+math,2,5 × 8 ＝ ？,36,38,40,42,2,5×8＝40だよ,normal
+math,2,48 ＋ 35 ＝ ？,81,82,83,84,2,48たす35は83だよ,normal
+math,2,6 × 6 ＝ ？,32,34,36,38,2,6×6＝36だよ,normal
+math,2,7 × 8 ＝ ？,52,54,56,58,2,7×8＝56だよ,hard
+math,2,9 × 9 ＝ ？,78,80,81,83,2,9×9＝81だよ,hard
+math,2,200 ー 73 ＝ ？,127,128,137,130,0,200から73をひくと127だよ,hard
+math,2,4 × 9 ＝ ？,34,36,38,40,1,4×9＝36だよ,hard
+math,2,8 × 8 ＝ ？,60,62,64,66,2,8×8＝64だよ,hard
+math,2,9 × 7 ＝ ？,61,62,63,64,2,9×7＝63だよ,hard
+japanese,2,「大きい」の読みかたは？,おおきい,ちいさい,たかい,ながい,0,大きいはおおきいとよむよ,easy
+japanese,2,「小さい」の読みかたは？,おおきい,ちいさい,やすい,はやい,1,小さいはちいさいとよむよ,easy
+japanese,2,「上」の読みかたは？,した,うえ,まえ,うしろ,1,上はうえとよむよ,easy
+japanese,2,「下」の読みかたは？,した,うえ,まえ,うしろ,0,下はしたとよむよ,easy
+japanese,2,「おおきい」のはんたいは？,たかい,おもい,ちいさい,ながい,2,おおきいのはんたいはちいさいだよ,easy
+japanese,2,「あつい」のはんたいは？,つめたい,さむい,つよい,やわらかい,0,あついのはんたいはつめたいだよ,easy
+japanese,2,「はやい」のはんたいは？,おそい,やわらかい,ながい,かるい,0,はやいのはんたいはおそいだよ,easy
+japanese,2,「森」の読みかたは？,うみ,もり,やま,さと,1,森はもりとよむよ,normal
+japanese,2,「川」の読みかたは？,うみ,かわ,いけ,やま,1,川はかわとよむよ,normal
+japanese,2,「石」の読みかたは？,いわ,いし,つち,すな,1,石はいしとよむよ,normal
+japanese,2,「たのしい」のはんたいは？,うれしい,かなしい,つまらない,さびしい,2,たのしいのはんたいはつまらないだよ,normal
+japanese,2,「明るい」の読みかたは？,あかるい,くらい,たかい,はやい,0,明るいはあかるいとよむよ,normal
+japanese,2,「空」の読みかたは？,うみ,かわ,そら,やま,2,空はそらとよむよ,normal
+japanese,2,「虫」の読みかたは？,むし,とり,さかな,けもの,0,虫はむしとよむよ,normal
+japanese,2,「長い」の読みかたは？,みじかい,ながい,おもい,かるい,1,長いはながいとよむよ,normal
+japanese,2,「電車」の読みかたは？,でんちゃ,でんしゃ,でんじゃ,でんか,1,電車はでんしゃとよむよ,hard
+japanese,2,「正しい」の読みかたは？,ただしい,まさしい,よろしい,ただいい,0,正しいはただしいとよむよ,hard
+japanese,2,「親切」の読みかたは？,おやせつ,しんせつ,おやきり,しんきり,1,親切はしんせつとよむよ,hard
+japanese,2,「話す」の読みかたは？,はなす,よむ,かく,きく,0,話すははなすとよむよ,hard
+japanese,2,「読む」の読みかたは？,はなす,よむ,かく,きく,1,読むはよむとよむよ,hard
+english,2,青は英語で？,red,blue,green,yellow,1,青はblueだよ,easy
+english,2,大きいは英語で？,small,big,long,short,1,大きいはbigだよ,easy
+english,2,魚は英語で？,bird,fish,cat,dog,1,魚はfishだよ,easy
+english,2,月曜日は英語で？,Sunday,Monday,Tuesday,Wednesday,1,月曜日はMondayだよ,normal
+english,2,りんごは英語で？,orange,banana,apple,grape,2,りんごはappleだよ,normal
+english,2,7・8・9を英語で？,seven eight nine,five six seven,six seven eight,eight nine ten,0,7はseven 8はeight 9はnineだよ,normal
+english,2,白は英語で？,black,gray,white,pink,2,白はwhiteだよ,hard
+english,2,「Good morning」のいみは？,こんばんは,おはよう,こんにちは,さようなら,1,Good morningはおはようのいみだよ,hard
