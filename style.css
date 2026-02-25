@@ -326,6 +326,16 @@ html, body {
 }
 .settings-close-btn:active { transform: translateY(2px); box-shadow: 0 2px 0 #2a6a00; }
 
+.settings-export-btn {
+  font-family: inherit; font-weight: 700; font-size: 0.9rem;
+  padding: 8px 16px; border-radius: 8px; border: none;
+  background: linear-gradient(180deg,#66aaff,#3366cc);
+  color: #fff; cursor: pointer;
+  box-shadow: 0 3px 0 #1a3a88;
+  touch-action: manipulation;
+}
+.settings-export-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 #1a3a88; }
+
 /* ===== WORLD CLEARS PANEL ===== */
 #world-clears {
   position: fixed;

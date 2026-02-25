@@ -22,6 +22,10 @@ Three.js製の3Dマイクラ風学習ゲーム。小学生（主に2年生〜6�
 | `manifest.json` | PWA設定 |
 | `sw.js` | Service Worker（questions.csv はnetwork-first） |
 | `archive/portal-quiz-v1/` | 旧ポータル＆クイズ方式のアーカイブ |
+| `tools/dashboard.js` | ローカル学習統計ダッシュボード（Node.js） |
+| `tools/package.json` | ダッシュボード用 npm 設定 |
+| `tools/.env.example` | API キーテンプレート |
+| `.gitignore` | `.env` / `tools/node_modules/` を除外 |
 
 ## 技術スタック
 - Three.js r0.158.0（CDN）
@@ -185,6 +189,24 @@ Three.js製の3Dマイクラ風学習ゲーム。小学生（主に2年生〜6�
 | `SETTINGS_KEY` | `mclearn3d_settings_v1` | 設定（speed/bgmVol/seVol/difficulty） |
 | `CUSTOM_Q_KEY` | `mclearn3d_custom_q_v1` | questions.csv のパース済みキャッシュ |
 | `DAILY_LOG_KEY` | `mclearn3d_daily_v1` | 日次学習ログ（30日分、YYYY-MM-DD形式） |
+
+### 学習統計ダッシュボード（tools/dashboard.js）
+- **目的**: ゲームの正誤統計を可視化 → Claude AIが弱点分析 → 克服問題を自動生成 → questions.csv に追記してgit push
+- **起動手順**:
+  1. `tools/.env` を作成して `ANTHROPIC_API_KEY=sk-...` を記載
+  2. `cd tools && npm install && node dashboard.js`
+  3. ブラウザで `http://localhost:3001` を開く
+- **エクスポート方法**: ゲームの「⚙️ せってい」→「📥 エクスポート」→ `minecraft-stats.json` がダウンロードされる
+- **ダッシュボードの流れ**:
+  1. JSONファイルをアップロード → 問題ごとの正解率テーブルを表示
+  2. 「🔍 よわてんを ぶんせきする」→ Claude が苦手分野を分析
+  3. 「✨ もんだいを つくる」→ Claude が8問生成（編集可能）
+  4. 「📝 CSV に ついか して git push」→ questions.csv 追記 + 自動push
+- **APIエンドポイント**:
+  - `POST /api/analyze` → 弱点分析（claude-haiku-4-5-20251001使用）
+  - `POST /api/generate` → 問題生成（claude-haiku-4-5-20251001使用）
+  - `POST /api/implement` → CSV追記 + git push
+- **注意**: `.env` は gitignore済み。APIキーをコードに直接書かないこと
 
 ## 開発ルール
 - 変更後は必ず `node --check app.js` で構文確認

@@ -1,0 +1,16 @@
+{
+  "name": "minecraft-learning-dashboard",
+  "version": "1.0.0",
+  "description": "学習統計ダッシュボード",
+  "main": "dashboard.js",
+  "scripts": {
+    "start": "node dashboard.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.36.0",
+    "dotenv": "^16.4.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

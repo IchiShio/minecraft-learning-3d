@@ -602,6 +602,31 @@ class Game {
     this.saveSettings();
   }
 
+  exportStats() {
+    const questions = [];
+    ['math','japanese','english'].forEach(subj => {
+      const grades = this.quizData?.[subj]?.grades || {};
+      Object.entries(grades).forEach(([grade, qs]) => {
+        qs.forEach(q => {
+          const stat = this.playerStats[q.id] || { seen:0, correct:0, wrong:0, streak:0 };
+          questions.push({
+            id: q.id, subject: subj, grade: parseInt(grade),
+            q: q.q, diff: q.diff || 'normal',
+            seen: stat.seen, correct: stat.correct, wrong: stat.wrong,
+            streak: stat.streak || 0,
+          });
+        });
+      });
+    });
+    const data = JSON.stringify({ exportedAt: new Date().toISOString(), questions }, null, 2);
+    const blob = new Blob([data], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'minecraft-stats.json'; a.click();
+    URL.revokeObjectURL(url);
+    this._showToast('📊 せいせきを エクスポートしました！\ntools/dashboard.js で ひらいてね');
+  }
+
   // ===== AUDIO =====
   initAudio() {
     if (this.audioCtx) {
@@ -2967,6 +2992,9 @@ addEventListener('load', () => {
         });
         document.getElementById('btn-settings-close').addEventListener('click', () => {
           game.closeSettings();
+        });
+        document.getElementById('btn-export-stats').addEventListener('click', () => {
+          game.exportStats();
         });
 
         // スピードボタン
