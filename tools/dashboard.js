@@ -4,12 +4,24 @@ const fs    = require('fs');
 const path  = require('path');
 const { execSync } = require('child_process');
 
-// .env ロード（tools/.env）
 try { require('dotenv').config({ path: path.join(__dirname, '.env') }); } catch(e) {}
 
 const PORT     = 3001;
 const ROOT     = path.join(__dirname, '..');
 const CSV_PATH = path.join(ROOT, 'questions.csv');
+
+// MIME types
+const MIME = {
+  '.html': 'text/html; charset=utf-8',
+  '.css':  'text/css; charset=utf-8',
+  '.js':   'application/javascript; charset=utf-8',
+  '.json': 'application/json',
+  '.csv':  'text/plain; charset=utf-8',
+  '.png':  'image/png',
+  '.ico':  'image/x-icon',
+  '.webmanifest': 'application/manifest+json',
+  '.txt':  'text/plain; charset=utf-8',
+};
 
 // ===== Claude API =====
 let anthropic = null;
@@ -24,10 +36,12 @@ try {
 
 // ===== Prompts =====
 function buildAnalyzePrompt(questions) {
-  const rows = questions.filter(q => q.seen > 0);
-  const summary = rows.map(q => {
-    const acc = q.seen > 0 ? Math.round(q.correct / q.seen * 100) : 0;
-    return `[${q.subject}/grade${q.grade}/${q.diff}] 正解率${acc}%(${q.correct}/${q.seen}) 問題:「${q.q}」`;
+  const attempted = questions.filter(q => q.seen > 0);
+  if (attempted.length === 0) return '統計データがありません。';
+
+  const summary = attempted.map(q => {
+    const acc = Math.round(q.correct / q.seen * 100);
+    return `[${q.subject}/grade${q.grade}/${q.diff}] 正解率${acc}%(${q.correct}/${q.seen}) 「${q.q}」`;
   }).join('\n');
 
   return `あなたは小学生向け学習ゲームのAIアシスタントです。
@@ -44,24 +58,19 @@ ${summary}
 }
 
 function buildGeneratePrompt(analysis, questions) {
-  const weakSubjects = {};
-  questions.filter(q => q.seen > 0).forEach(q => {
-    const acc = q.correct / q.seen;
-    if (acc < 0.6) {
-      const key = q.subject;
-      if (!weakSubjects[key]) weakSubjects[key] = [];
-      weakSubjects[key].push(`「${q.q}」(正解率${Math.round(acc*100)}%)`);
-    }
-  });
+  const weak = questions
+    .filter(q => q.seen > 0 && q.correct / q.seen < 0.6)
+    .sort((a, b) => (a.correct / a.seen) - (b.correct / b.seen))
+    .slice(0, 6);
 
-  const weakList = Object.entries(weakSubjects)
-    .map(([subj, qs]) => `${subj}: ${qs.slice(0,3).join(', ')}`)
-    .join('\n');
+  const weakList = weak.length > 0
+    ? weak.map(q => `[${q.subject}] 「${q.q}」(正解率${Math.round(q.correct/q.seen*100)}%)`).join('\n')
+    : '全体的に練習が必要';
 
   return `以下の苦手な問題に対する新しい練習問題を8問生成してください。
 
-苦手分野:
-${weakList || '全体的に練習が必要'}
+苦手問題:
+${weakList}
 
 以下のCSV形式で出力してください（ヘッダーなし、1行1問）：
 subject,grade,question,opt1,opt2,opt3,opt4,correct,explain,diff
@@ -80,28 +89,29 @@ CSVのみ出力してください（説明文は不要）。`;
 }
 
 function parseGeneratedCSV(raw) {
-  const lines = raw.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#') && !l.startsWith('subject'));
   const rows = [];
-  lines.forEach(line => {
+  raw.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#') && !l.startsWith('subject')).forEach(line => {
     const parts = line.split(',');
     if (parts.length < 8) return;
+    const subject = parts[0]?.trim();
+    if (!['math','japanese','english'].includes(subject)) return;
     rows.push({
-      subject: parts[0]?.trim(),
-      grade:   parts[1]?.trim() || '2',
-      question:parts[2]?.trim(),
-      opt1:    parts[3]?.trim(),
-      opt2:    parts[4]?.trim(),
-      opt3:    parts[5]?.trim(),
-      opt4:    parts[6]?.trim(),
-      correct: parts[7]?.trim(),
-      explain: parts[8]?.trim() || '',
-      diff:    parts[9]?.trim() || 'normal',
+      subject,
+      grade:    parts[1]?.trim() || '2',
+      question: parts[2]?.trim(),
+      opt1:     parts[3]?.trim(),
+      opt2:     parts[4]?.trim(),
+      opt3:     parts[5]?.trim(),
+      opt4:     parts[6]?.trim(),
+      correct:  parts[7]?.trim(),
+      explain:  parts[8]?.trim() || '',
+      diff:     parts[9]?.trim() || 'normal',
     });
   });
   return rows;
 }
 
-// ===== HTTP Body Parser =====
+// ===== HTTP helpers =====
 function parseBody(req) {
   return new Promise((resolve, reject) => {
     let body = '';
@@ -112,14 +122,25 @@ function parseBody(req) {
     req.on('error', reject);
   });
 }
-
 function jsonRes(res, data, status = 200) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': '*' });
   res.end(JSON.stringify(data));
 }
+function serveFile(res, filePath) {
+  if (!filePath.startsWith(ROOT + path.sep) && filePath !== ROOT) {
+    res.writeHead(403); res.end(); return;
+  }
+  if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+    res.writeHead(404); res.end('Not Found'); return;
+  }
+  const ext  = path.extname(filePath);
+  const mime = MIME[ext] || 'application/octet-stream';
+  res.writeHead(200, { 'Content-Type': mime });
+  res.end(fs.readFileSync(filePath));
+}
 
 // ===== Dashboard HTML =====
-const HTML = `<!DOCTYPE html>
+const DASHBOARD_HTML = `<!DOCTYPE html>
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
@@ -127,318 +148,330 @@ const HTML = `<!DOCTYPE html>
 <title>📊 マイクラ学習 ダッシュボード</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:#1a1a2e;color:#ddd;font-family:monospace,sans-serif;min-height:100vh;padding:20px}
-h1{color:#5dbb63;text-align:center;font-size:1.6rem;margin-bottom:24px;text-shadow:0 0 8px #3a7a3e}
-h2{color:#88ccff;font-size:1.1rem;margin-bottom:12px;border-left:4px solid #4499dd;padding-left:10px}
-section{background:#16213e;border:2px solid #2a2a4a;border-radius:8px;padding:20px;margin-bottom:24px}
-.upload-area{border:2px dashed #4499dd;border-radius:6px;padding:20px;text-align:center;cursor:pointer}
-.upload-area:hover{background:#1a2a4a}
-input[type=file]{display:none}
-.btn{background:#4a8a50;color:#fff;border:none;border-radius:4px;padding:10px 20px;font-size:1rem;cursor:pointer;font-family:inherit;margin:4px}
+body{background:#1a1a2e;color:#ddd;font-family:monospace,sans-serif;min-height:100vh;padding:16px 20px}
+a{color:#88ccff}
+h1{color:#5dbb63;text-align:center;font-size:1.5rem;margin-bottom:20px;text-shadow:0 0 8px #3a7a3e}
+h2{color:#88ccff;font-size:1rem;margin-bottom:10px;border-left:4px solid #4499dd;padding-left:8px}
+section{background:#16213e;border:2px solid #2a2a4a;border-radius:8px;padding:16px;margin-bottom:18px}
+.notice{background:#1a2a1a;border:1px solid #3a6a3a;border-radius:6px;padding:12px;color:#aaddaa;font-size:.85rem;margin-bottom:18px;line-height:1.6}
+.notice code{background:#0a1a0a;padding:2px 6px;border-radius:3px;color:#7dff4f}
+.btn{background:#3a7a40;color:#fff;border:none;border-radius:4px;padding:10px 22px;font-size:.95rem;cursor:pointer;font-family:inherit;margin:4px 4px 4px 0;transition:background .15s}
 .btn:hover{background:#5dbb63}
-.btn-blue{background:#2255aa}
-.btn-blue:hover{background:#3377cc}
-.btn-orange{background:#aa6611}
-.btn-orange:hover{background:#cc8822}
-.btn-red{background:#aa2222}
-.btn-red:hover{background:#cc3333}
-.btn:disabled{opacity:.5;cursor:not-allowed}
-.summary-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}
-.summary-card{background:#0f3460;border-radius:6px;padding:12px;text-align:center}
-.summary-card .num{font-size:2rem;font-weight:bold;color:#5dbb63}
-.summary-card .label{font-size:.8rem;color:#aaa;margin-top:4px}
-table{width:100%;border-collapse:collapse;font-size:.85rem}
-th{background:#0f3460;color:#88ccff;padding:8px 6px;text-align:left}
-td{padding:6px;border-bottom:1px solid #2a2a4a}
+.btn-blue{background:#2255aa}.btn-blue:hover{background:#3377cc}
+.btn-orange{background:#995511}.btn-orange:hover{background:#bb7722}
+.btn-red{background:#991111}.btn-red:hover{background:#cc2222}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.summary-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;margin-bottom:14px}
+.card{background:#0f3460;border-radius:6px;padding:10px;text-align:center}
+.card .num{font-size:1.8rem;font-weight:bold;color:#5dbb63}
+.card .lbl{font-size:.75rem;color:#aaa;margin-top:4px}
+table{width:100%;border-collapse:collapse;font-size:.82rem}
+th{background:#0f3460;color:#88ccff;padding:7px 5px;text-align:left;position:sticky;top:0}
+td{padding:5px;border-bottom:1px solid #252545}
 tr:hover td{background:#1a2a3a}
-.bar-wrap{background:#2a2a4a;border-radius:3px;height:10px;width:100px;display:inline-block;vertical-align:middle}
-.bar{height:100%;border-radius:3px;transition:width .4s}
-.bar-green{background:#5dbb63}
-.bar-orange{background:#cc8822}
-.bar-red{background:#cc3333}
-.tag-math{background:#3a6a20;color:#aaffaa;padding:2px 6px;border-radius:3px;font-size:.75rem}
-.tag-jp{background:#6a3a20;color:#ffaaaa;padding:2px 6px;border-radius:3px;font-size:.75rem}
-.tag-en{background:#1a4a7a;color:#aaccff;padding:2px 6px;border-radius:3px;font-size:.75rem}
-.tag-easy{color:#88ff88;font-size:.75rem}
-.tag-normal{color:#ffcc44;font-size:.75rem}
-.tag-hard{color:#ff8888;font-size:.75rem}
-.analysis-box{background:#0a1a2a;border:1px solid #2255aa;border-radius:6px;padding:16px;white-space:pre-wrap;line-height:1.6;margin-top:12px;font-size:.9rem}
-.gen-table input{width:100%;background:#1a2a3a;border:1px solid #3a3a5a;color:#ddd;padding:3px 5px;font-family:inherit;font-size:.8rem;border-radius:3px}
-.gen-table select{background:#1a2a3a;border:1px solid #3a3a5a;color:#ddd;padding:3px;font-family:inherit;font-size:.8rem;border-radius:3px}
-.result-box{background:#0a1a2a;border:1px solid #3a5a2a;border-radius:6px;padding:12px;margin-top:12px;white-space:pre-wrap;font-size:.85rem}
-.loading{color:#ffcc44;margin:8px 0}
+.bar-wrap{background:#2a2a4a;border-radius:3px;height:8px;width:80px;display:inline-block;vertical-align:middle}
+.bar{height:100%;border-radius:3px}.bg{background:#5dbb63}.bo{background:#cc8822}.br{background:#cc3333}
+.sm{color:#88ff88;font-size:.75rem;padding:1px 5px;border-radius:3px;background:#1a4a1a}
+.sj{color:#ffaaaa;font-size:.75rem;padding:1px 5px;border-radius:3px;background:#4a1a1a}
+.se{color:#aaccff;font-size:.75rem;padding:1px 5px;border-radius:3px;background:#1a2a5a}
+.de{color:#88ff88;font-size:.72rem}.dn{color:#ffcc44;font-size:.72rem}.dh{color:#ff8888;font-size:.72rem}
+.ai-box{background:#0a1a2a;border:1px solid #2255aa;border-radius:6px;padding:14px;white-space:pre-wrap;line-height:1.65;margin-top:10px;font-size:.88rem}
+.gen-table input,.gen-table select{width:100%;background:#1a2a3a;border:1px solid #3a3a5a;color:#ddd;padding:3px 4px;font-family:inherit;font-size:.78rem;border-radius:3px}
+.gen-table select{width:auto}
+.result{background:#0a1a0a;border:1px solid #2a5a2a;border-radius:6px;padding:12px;margin-top:10px;white-space:pre-wrap;font-size:.82rem}
+.err{background:#1a0a0a;border-color:#5a2a2a}
+.spin{color:#ffcc44;margin:8px 0;font-size:.9rem}
 .hidden{display:none!important}
-.info{color:#aaa;font-size:.85rem;margin-bottom:12px}
+.tscroll{overflow-x:auto;max-height:340px;overflow-y:auto}
 </style>
 </head>
 <body>
 <h1>📊 マイクラ学習 ダッシュボード</h1>
 
-<!-- Step 1: ファイル読み込み -->
+<div class="notice" id="local-notice">
+  ⚠️ ダッシュボードを使う場合は <a href="/game/" target="_blank">http://localhost:3001/game/</a> でゲームを開いてください。<br>
+  GitHub Pages (<code>ichishio.github.io</code>) でプレイした統計は読み込めません。<br>
+  <span id="stats-check-msg"></span>
+</div>
+
+<!-- ① 統計読み込み -->
 <section>
-  <h2>① せいせきファイルを よみこむ</h2>
-  <p class="info">ゲームの「⚙️ せってい」→「📊 エクスポート」でダウンロードした JSON ファイルを選択してください。</p>
-  <div class="upload-area" onclick="document.getElementById('file-input').click()">
-    <div style="font-size:3rem">📂</div>
-    <div style="margin-top:8px">クリックして minecraft-stats.json を選択</div>
-  </div>
-  <input type="file" id="file-input" accept=".json">
-  <div id="file-status" class="info" style="margin-top:8px"></div>
+  <h2>① せいせきを読み込む</h2>
+  <button class="btn" id="btn-load" onclick="loadStats()">🔄 localStorage から読み込む</button>
+  <div id="load-status" style="margin-top:8px;font-size:.85rem;color:#aaa"></div>
 </section>
 
-<!-- Step 2: 統計表示 -->
+<!-- ② 統計表示 -->
 <section id="stats-section" class="hidden">
   <h2>② せいせき サマリー</h2>
   <div class="summary-grid" id="summary-grid"></div>
-  <h2 style="margin-top:16px">問題ごとの せいせき</h2>
-  <div style="overflow-x:auto">
-  <table>
-    <thead><tr><th>教科</th><th>学年</th><th>難</th><th>問題</th><th>正解</th><th>不正</th><th>正解率</th><th>バー</th></tr></thead>
-    <tbody id="stats-tbody"></tbody>
-  </table>
+  <h2 style="margin-top:12px">問題ごとのせいせき（正解率の低い順）</h2>
+  <div class="tscroll">
+    <table>
+      <thead><tr><th>教科</th><th>難</th><th>問題</th><th>正</th><th>誤</th><th>正解率</th><th></th></tr></thead>
+      <tbody id="stats-tbody"></tbody>
+    </table>
   </div>
 </section>
 
-<!-- Step 3: AI分析 -->
+<!-- ③ AI分析 + 問題生成 -->
 <section id="analyze-section" class="hidden">
-  <h2>③ AI よわてん ぶんせき</h2>
-  <button class="btn btn-blue" onclick="analyzeStats()">🔍 よわてんを ぶんせきする</button>
-  <div id="analyze-loading" class="loading hidden">⏳ Claude が分析中...</div>
-  <div id="analyze-result" class="analysis-box hidden"></div>
+  <h2>③ AI よわてん分析 ＋ 問題生成</h2>
+  <button class="btn btn-blue" id="btn-analyze" onclick="analyzeAndGenerate()">🔍✨ 分析して問題を生成する</button>
+  <div id="ai-spin" class="spin hidden"></div>
+  <div id="ai-result" class="ai-box hidden"></div>
 </section>
 
-<!-- Step 4: 問題生成 -->
-<section id="generate-section" class="hidden">
-  <h2>④ もんだい せいせい</h2>
-  <button class="btn btn-orange" onclick="generateQuestions()">✨ よわてんの もんだいを つくる</button>
-  <div id="generate-loading" class="loading hidden">⏳ Claude が問題を作成中...</div>
-  <div id="generate-result" class="hidden">
-    <p class="info" style="margin-top:12px">生成された問題を確認・編集してから実装できます。</p>
-    <div style="overflow-x:auto">
+<!-- ④ 生成問題の確認・編集 -->
+<section id="review-section" class="hidden">
+  <h2>④ 生成された問題を確認・編集</h2>
+  <div class="tscroll">
     <table class="gen-table">
       <thead><tr><th>✓</th><th>教科</th><th>問題</th><th>opt1</th><th>opt2</th><th>opt3</th><th>opt4</th><th>正解</th><th>解説</th><th>難</th></tr></thead>
       <tbody id="gen-tbody"></tbody>
     </table>
-    </div>
   </div>
 </section>
 
-<!-- Step 5: 実装 -->
+<!-- ⑤ 実装 -->
 <section id="implement-section" class="hidden">
-  <h2>⑤ questions.csv に じっそう</h2>
-  <button class="btn btn-red" onclick="implementQuestions()">📝 CSV に ついか して git push</button>
-  <div id="implement-result" class="result-box hidden"></div>
+  <h2>⑤ questions.csv に実装</h2>
+  <button class="btn btn-red" id="btn-impl" onclick="implementQuestions()">📝 CSV に追加して git push</button>
+  <div id="impl-result" class="result hidden"></div>
 </section>
 
 <script>
-let statsData = null;
+let statsData   = null;  // [{id,subject,grade,q,diff,seen,correct,wrong}]
 let analysisText = '';
-let generatedRows = [];
 
-// ファイル選択
-document.getElementById('file-input').addEventListener('change', e => {
-  const file = e.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = ev => {
-    try {
-      statsData = JSON.parse(ev.target.result);
-      document.getElementById('file-status').textContent = '✅ ' + file.name + ' を読み込みました';
-      renderStats();
-    } catch(err) {
-      document.getElementById('file-status').textContent = '❌ JSONの読み込みに失敗しました: ' + err.message;
-    }
-  };
-  reader.readAsText(file);
-});
-
-function subjTag(s) {
-  if (s === 'math') return '<span class="tag-math">さんすう</span>';
-  if (s === 'japanese') return '<span class="tag-jp">こくご</span>';
-  return '<span class="tag-en">えいご</span>';
-}
-function diffTag(d) {
-  if (d === 'easy') return '<span class="tag-easy">かんたん</span>';
-  if (d === 'hard') return '<span class="tag-hard">むずかしい</span>';
-  return '<span class="tag-normal">ふつう</span>';
+// ===== CSV パーサー（app.js の parseCSV + buildQuizData と同じロジック） =====
+function parseCSV(text) {
+  const lines = text.split('\\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+  if (lines.length < 2) return [];
+  const headers = lines[0].split(',').map(h => h.trim());
+  return lines.slice(1).map(line => {
+    const vals = line.split(',').map(v => v.trim());
+    const obj = {};
+    headers.forEach((h, i) => { obj[h] = vals[i] !== undefined ? vals[i] : ''; });
+    return obj;
+  }).filter(r => r.subject && r.question && r.opt1 && r.opt2);
 }
 
-function renderStats() {
-  const qs = statsData.questions || [];
-  const played = qs.filter(q => q.seen > 0);
+// ===== 統計読み込み =====
+async function loadStats() {
+  const statusEl = document.getElementById('load-status');
+  statusEl.textContent = '読み込み中...';
 
-  // サマリーカード
-  const totalSeen    = played.reduce((a,q) => a + q.seen, 0);
-  const totalCorrect = played.reduce((a,q) => a + q.correct, 0);
-  const acc = totalSeen > 0 ? Math.round(totalCorrect / totalSeen * 100) : 0;
-  const subjectAcc = {};
-  played.forEach(q => {
-    if (!subjectAcc[q.subject]) subjectAcc[q.subject] = { c:0, s:0 };
-    subjectAcc[q.subject].c += q.correct;
-    subjectAcc[q.subject].s += q.seen;
+  // localStorage から統計取得
+  const statsRaw = localStorage.getItem('mclearn3d_stats_v1');
+  const stats = statsRaw ? JSON.parse(statsRaw) : {};
+
+  if (Object.keys(stats).length === 0) {
+    statusEl.textContent = '⚠️ まだ統計データがありません。http://localhost:3001/game/ でゲームをプレイしてください。';
+    return;
+  }
+
+  // questions.csv を取得して問題テキストと紐付け
+  let questions = [];
+  try {
+    const csvRes = await fetch('/game/questions.csv');
+    const csvText = await csvRes.text();
+    const rows = parseCSV(csvText);
+    rows.forEach((r, idx) => {
+      const id = \`\${r.subject}_\${r.grade}_csv\${idx}\`;
+      const stat = stats[id] || { seen:0, correct:0, wrong:0, streak:0 };
+      questions.push({
+        id, subject: r.subject, grade: parseInt(r.grade)||2,
+        q: r.question, diff: r.diff||'normal',
+        seen: stat.seen||0, correct: stat.correct||0, wrong: stat.wrong||0,
+      });
+    });
+  } catch(e) {
+    statusEl.textContent = '⚠️ questions.csv の読み込みに失敗しました: ' + e.message;
+    return;
+  }
+
+  statsData = questions;
+  const attempted = questions.filter(q => q.seen > 0);
+  statusEl.textContent = \`✅ 読み込み完了（\${attempted.length} 問に回答済み / 全\${questions.length}問）\`;
+  renderStats(attempted);
+  document.getElementById('stats-section').classList.remove('hidden');
+  document.getElementById('analyze-section').classList.remove('hidden');
+}
+
+// ===== 統計テーブル描画 =====
+function renderStats(attempted) {
+  const totalSeen    = attempted.reduce((a,q) => a+q.seen,    0);
+  const totalCorrect = attempted.reduce((a,q) => a+q.correct, 0);
+  const acc = totalSeen > 0 ? Math.round(totalCorrect/totalSeen*100) : 0;
+
+  const bySub = {};
+  attempted.forEach(q => {
+    if (!bySub[q.subject]) bySub[q.subject] = {c:0,s:0};
+    bySub[q.subject].c += q.correct;
+    bySub[q.subject].s += q.seen;
   });
+  const subLabel = {math:'さんすう', japanese:'こくご', english:'えいご'};
 
-  const subLabels = { math:'さんすう', japanese:'こくご', english:'えいご' };
   let cards = \`
-    <div class="summary-card"><div class="num">\${totalSeen}</div><div class="label">合計回答</div></div>
-    <div class="summary-card"><div class="num">\${acc}%</div><div class="label">全体正解率</div></div>
-    <div class="summary-card"><div class="num">\${played.length}</div><div class="label">解いた問題数</div></div>
+    <div class="card"><div class="num">\${totalSeen}</div><div class="lbl">合計回答</div></div>
+    <div class="card"><div class="num">\${acc}%</div><div class="lbl">全体正解率</div></div>
+    <div class="card"><div class="num">\${attempted.length}</div><div class="lbl">解いた問題数</div></div>
   \`;
-  Object.entries(subjectAcc).forEach(([subj, v]) => {
-    const a = v.s > 0 ? Math.round(v.c / v.s * 100) : 0;
-    cards += \`<div class="summary-card"><div class="num">\${a}%</div><div class="label">\${subLabels[subj]||subj} 正解率</div></div>\`;
+  ['math','japanese','english'].forEach(s => {
+    if (!bySub[s]) return;
+    const a = bySub[s].s > 0 ? Math.round(bySub[s].c/bySub[s].s*100) : 0;
+    cards += \`<div class="card"><div class="num">\${a}%</div><div class="lbl">\${subLabel[s]}</div></div>\`;
   });
   document.getElementById('summary-grid').innerHTML = cards;
 
-  // 問題テーブル（seen > 0 のもの、正解率昇順）
-  const sorted = [...played].sort((a,b) => (a.correct/a.seen) - (b.correct/b.seen));
-  const tbody = document.getElementById('stats-tbody');
-  tbody.innerHTML = sorted.map(q => {
-    const a = q.seen > 0 ? Math.round(q.correct / q.seen * 100) : 0;
-    const barCol = a >= 70 ? 'bar-green' : a >= 40 ? 'bar-orange' : 'bar-red';
+  const sorted = [...attempted].sort((a,b) => (a.correct/a.seen)-(b.correct/b.seen));
+  document.getElementById('stats-tbody').innerHTML = sorted.map(q => {
+    const a = Math.round(q.correct/q.seen*100);
+    const bc = a>=70?'bg':a>=40?'bo':'br';
+    const stag = q.subject==='math'?'<span class="sm">さんすう</span>':q.subject==='japanese'?'<span class="sj">こくご</span>':'<span class="se">えいご</span>';
+    const dtag = q.diff==='easy'?'<span class="de">かんたん</span>':q.diff==='hard'?'<span class="dh">むずかしい</span>':'<span class="dn">ふつう</span>';
     return \`<tr>
-      <td>\${subjTag(q.subject)}</td>
-      <td>\${q.grade}年</td>
-      <td>\${diffTag(q.diff)}</td>
-      <td style="max-width:200px">\${q.q}</td>
+      <td>\${stag}</td><td>\${dtag}</td>
+      <td style="max-width:220px">\${esc(q.q)}</td>
       <td style="color:#88ff88">\${q.correct}</td>
       <td style="color:#ff8888">\${q.wrong}</td>
       <td>\${a}%</td>
-      <td><div class="bar-wrap"><div class="bar \${barCol}" style="width:\${a}%"></div></div></td>
+      <td><div class="bar-wrap"><div class="bar \${bc}" style="width:\${a}%"></div></div></td>
     </tr>\`;
   }).join('');
-
-  show('stats-section');
-  show('analyze-section');
 }
 
-async function analyzeStats() {
+// ===== AI 分析 ＋ 問題生成（一括） =====
+async function analyzeAndGenerate() {
   if (!statsData) return;
-  const loading = document.getElementById('analyze-loading');
-  const result  = document.getElementById('analyze-result');
-  loading.classList.remove('hidden');
+  const btn   = document.getElementById('btn-analyze');
+  const spin  = document.getElementById('ai-spin');
+  const result = document.getElementById('ai-result');
+  btn.disabled = true;
+  spin.textContent = '⏳ Claude が弱点を分析中...';
+  spin.classList.remove('hidden');
   result.classList.add('hidden');
 
   try {
-    const res = await fetch('/api/analyze', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ questions: statsData.questions }),
+    // ① 分析
+    const r1 = await fetch('/api/analyze', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ questions: statsData }),
     });
-    const data = await res.json();
-    if (data.error) throw new Error(data.error);
-    analysisText = data.analysis;
+    const d1 = await r1.json();
+    if (d1.error) throw new Error(d1.error);
+    analysisText = d1.analysis;
     result.textContent = analysisText;
     result.classList.remove('hidden');
-    show('generate-section');
-  } catch(err) {
-    result.textContent = '❌ エラー: ' + err.message;
-    result.classList.remove('hidden');
-  } finally {
-    loading.classList.add('hidden');
-  }
-}
 
-async function generateQuestions() {
-  if (!statsData) return;
-  const loading = document.getElementById('generate-loading');
-  const result  = document.getElementById('generate-result');
-  loading.classList.remove('hidden');
-  result.classList.add('hidden');
-
-  try {
-    const res = await fetch('/api/generate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ analysis: analysisText, questions: statsData.questions }),
+    // ② 問題生成
+    spin.textContent = '⏳ Claude が問題を生成中...';
+    const r2 = await fetch('/api/generate', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ analysis: analysisText, questions: statsData }),
     });
-    const data = await res.json();
-    if (data.error) throw new Error(data.error);
-    generatedRows = data.rows;
+    const d2 = await r2.json();
+    if (d2.error) throw new Error(d2.error);
 
-    const subLabels = { math:'さんすう', japanese:'こくご', english:'えいご' };
-    const tbody = document.getElementById('gen-tbody');
-    tbody.innerHTML = generatedRows.map((r, i) => \`<tr data-i="\${i}">
-      <td><input type="checkbox" checked class="gen-check" data-i="\${i}"></td>
-      <td><select class="gen-subj" data-i="\${i}">
-        <option value="math"\${r.subject==='math'?' selected':''}>さんすう</option>
-        <option value="japanese"\${r.subject==='japanese'?' selected':''}>こくご</option>
-        <option value="english"\${r.subject==='english'?' selected':''}>えいご</option>
-      </select></td>
-      <td><input value="\${esc(r.question)}" class="gen-q" data-i="\${i}"></td>
-      <td><input value="\${esc(r.opt1)}" class="gen-o1" data-i="\${i}"></td>
-      <td><input value="\${esc(r.opt2)}" class="gen-o2" data-i="\${i}"></td>
-      <td><input value="\${esc(r.opt3)}" class="gen-o3" data-i="\${i}"></td>
-      <td><input value="\${esc(r.opt4)}" class="gen-o4" data-i="\${i}"></td>
-      <td><input value="\${esc(r.correct)}" class="gen-c" data-i="\${i}" style="width:40px"></td>
-      <td><input value="\${esc(r.explain)}" class="gen-ex" data-i="\${i}"></td>
-      <td><select class="gen-diff" data-i="\${i}">
-        <option value="easy"\${r.diff==='easy'?' selected':''}>easy</option>
-        <option value="normal"\${r.diff==='normal'?' selected':''}>normal</option>
-        <option value="hard"\${r.diff==='hard'?' selected':''}>hard</option>
-      </select></td>
-    </tr>\`).join('');
+    renderGenerated(d2.rows);
+    document.getElementById('review-section').classList.remove('hidden');
+    document.getElementById('implement-section').classList.remove('hidden');
 
+  } catch(e) {
+    result.textContent = '❌ エラー: ' + e.message;
     result.classList.remove('hidden');
-    show('implement-section');
-  } catch(err) {
-    document.getElementById('generate-loading').textContent = '❌ エラー: ' + err.message;
   } finally {
-    loading.classList.add('hidden');
+    spin.classList.add('hidden');
+    btn.disabled = false;
   }
 }
 
-function esc(s) {
-  return (s||'').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+// ===== 生成問題テーブル =====
+function renderGenerated(rows) {
+  document.getElementById('gen-tbody').innerHTML = rows.map((r, i) => {
+    const subOpts = ['math','japanese','english'].map(s =>
+      \`<option value="\${s}"\${r.subject===s?' selected':''}>\${s==='math'?'math':s==='japanese'?'jp':'en'}</option>\`
+    ).join('');
+    const diffOpts = ['easy','normal','hard'].map(d =>
+      \`<option value="\${d}"\${r.diff===d?' selected':''}>\${d}</option>\`
+    ).join('');
+    return \`<tr data-i="\${i}">
+      <td><input type="checkbox" class="gchk" checked></td>
+      <td><select class="gsubj">\${subOpts}</select></td>
+      <td><input value="\${esc(r.question)}" class="gq"></td>
+      <td><input value="\${esc(r.opt1)}" class="go1"></td>
+      <td><input value="\${esc(r.opt2)}" class="go2"></td>
+      <td><input value="\${esc(r.opt3)}" class="go3"></td>
+      <td><input value="\${esc(r.opt4)}" class="go4"></td>
+      <td><input value="\${esc(r.correct)}" class="gc" style="width:36px"></td>
+      <td><input value="\${esc(r.explain)}" class="gex"></td>
+      <td><select class="gdiff">\${diffOpts}</select></td>
+    </tr>\`;
+  }).join('');
 }
 
+// ===== 実装 =====
 async function implementQuestions() {
-  // テーブルから最新の編集内容を収集
   const rows = [];
-  document.querySelectorAll('#gen-tbody tr').forEach((tr, i) => {
-    const cb = tr.querySelector('.gen-check');
-    if (!cb || !cb.checked) return;
+  document.querySelectorAll('#gen-tbody tr').forEach(tr => {
+    if (!tr.querySelector('.gchk').checked) return;
     rows.push({
-      subject:  tr.querySelector('.gen-subj').value,
+      subject:  tr.querySelector('.gsubj').value,
       grade:    '2',
-      question: tr.querySelector('.gen-q').value,
-      opt1:     tr.querySelector('.gen-o1').value,
-      opt2:     tr.querySelector('.gen-o2').value,
-      opt3:     tr.querySelector('.gen-o3').value,
-      opt4:     tr.querySelector('.gen-o4').value,
-      correct:  tr.querySelector('.gen-c').value,
-      explain:  tr.querySelector('.gen-ex').value,
-      diff:     tr.querySelector('.gen-diff').value,
+      question: tr.querySelector('.gq').value,
+      opt1:     tr.querySelector('.go1').value,
+      opt2:     tr.querySelector('.go2').value,
+      opt3:     tr.querySelector('.go3').value,
+      opt4:     tr.querySelector('.go4').value,
+      correct:  tr.querySelector('.gc').value,
+      explain:  tr.querySelector('.gex').value,
+      diff:     tr.querySelector('.gdiff').value,
     });
   });
-
-  if (rows.length === 0) {
-    alert('チェックされた問題がありません');
-    return;
-  }
+  if (rows.length === 0) { alert('チェックされた問題がありません'); return; }
   if (!confirm(\`\${rows.length}問を questions.csv に追加して git push しますか？\`)) return;
 
-  const result = document.getElementById('implement-result');
-  result.textContent = '⏳ 実装中...';
-  result.classList.remove('hidden');
+  const btn  = document.getElementById('btn-impl');
+  const res2 = document.getElementById('impl-result');
+  btn.disabled = true;
+  res2.textContent = '⏳ 実装中...';
+  res2.className = 'result';
+  res2.classList.remove('hidden');
 
   try {
     const res = await fetch('/api/implement', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ rows }),
     });
     const data = await res.json();
     if (data.error) throw new Error(data.error);
-    result.textContent = \`✅ 完了！\n\${data.gitResult}\n\n追加した問題:\n\` + rows.map((r,i) => \`\${i+1}. [\${r.subject}] \${r.question}\`).join('\\n');
-  } catch(err) {
-    result.textContent = '❌ エラー: ' + err.message;
+    res2.textContent = \`✅ 完了！\n\${data.gitResult}\n\n追加した問題:\n\` +
+      rows.map((r,i) => \`\${i+1}. [\${r.subject}] \${r.question}\`).join('\\n');
+  } catch(e) {
+    res2.className = 'result err';
+    res2.textContent = '❌ エラー: ' + e.message;
+  } finally {
+    btn.disabled = false;
   }
 }
 
-function show(id) {
-  document.getElementById(id).classList.remove('hidden');
-}
+function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ページロード時に localStorage の有無をチェック
+window.addEventListener('load', () => {
+  const raw = localStorage.getItem('mclearn3d_stats_v1');
+  const count = raw ? Object.keys(JSON.parse(raw)).length : 0;
+  const msg = document.getElementById('stats-check-msg');
+  if (count > 0) {
+    msg.textContent = \`✅ このブラウザには \${count} 問の統計があります。下のボタンで読み込んでください。\`;
+    msg.style.color = '#88ff88';
+    // ゲームをlocalで開いていれば通知を省略
+    document.getElementById('local-notice').style.borderColor = '#2a6a2a';
+  } else {
+    msg.textContent = '統計がまだありません。上のリンクからゲームを開いてプレイしてください。';
+  }
+});
 </script>
 </body>
 </html>`;
@@ -447,52 +480,56 @@ function show(id) {
 http.createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
 
-  if (req.method === 'GET' && req.url === '/') {
+  const url = req.url.split('?')[0];
+
+  // ダッシュボードUI
+  if (url === '/' || url === '/dashboard') {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    res.end(HTML);
+    res.end(DASHBOARD_HTML);
     return;
   }
 
-  if (req.method === 'POST' && req.url === '/api/analyze') {
+  // ゲームファイルを配信（/game/ or /game）
+  if (url.startsWith('/game')) {
+    const rel  = url.replace(/^\/game\/?/, '') || 'index.html';
+    const full = path.resolve(ROOT, rel);
+    serveFile(res, full);
+    return;
+  }
+
+  // API: 弱点分析
+  if (req.method === 'POST' && url === '/api/analyze') {
     try {
       const body = await parseBody(req);
-      if (!anthropic) {
-        jsonRes(res, { error: 'ANTHROPIC_API_KEY が設定されていません。tools/.env を確認してください。' }, 500);
-        return;
-      }
+      if (!anthropic) { jsonRes(res, { error: 'ANTHROPIC_API_KEY が未設定です。tools/.env を確認してください。' }, 500); return; }
       const msg = await anthropic.messages.create({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 1024,
-        messages: [{ role: 'user', content: buildAnalyzePrompt(body.questions || []) }],
+        messages: [{ role:'user', content: buildAnalyzePrompt(body.questions||[]) }],
       });
       jsonRes(res, { analysis: msg.content[0].text });
-    } catch(e) {
-      jsonRes(res, { error: e.message }, 500);
-    }
+    } catch(e) { jsonRes(res, { error: e.message }, 500); }
     return;
   }
 
-  if (req.method === 'POST' && req.url === '/api/generate') {
+  // API: 問題生成
+  if (req.method === 'POST' && url === '/api/generate') {
     try {
       const body = await parseBody(req);
-      if (!anthropic) {
-        jsonRes(res, { error: 'ANTHROPIC_API_KEY が設定されていません。tools/.env を確認してください。' }, 500);
-        return;
-      }
+      if (!anthropic) { jsonRes(res, { error: 'ANTHROPIC_API_KEY が未設定です。tools/.env を確認してください。' }, 500); return; }
       const msg = await anthropic.messages.create({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 2048,
-        messages: [{ role: 'user', content: buildGeneratePrompt(body.analysis || '', body.questions || []) }],
+        messages: [{ role:'user', content: buildGeneratePrompt(body.analysis||'', body.questions||[]) }],
       });
       const rows = parseGeneratedCSV(msg.content[0].text);
       jsonRes(res, { rows, raw: msg.content[0].text });
-    } catch(e) {
-      jsonRes(res, { error: e.message }, 500);
-    }
+    } catch(e) { jsonRes(res, { error: e.message }, 500); }
     return;
   }
 
-  if (req.method === 'POST' && req.url === '/api/implement') {
+  // API: CSV追記 + git push
+  if (req.method === 'POST' && url === '/api/implement') {
     try {
       const body = await parseBody(req);
       const rows = body.rows || [];
@@ -500,28 +537,25 @@ http.createServer(async (req, res) => {
 
       const lines = rows.map(r =>
         [r.subject, r.grade, r.question, r.opt1, r.opt2, r.opt3, r.opt4, r.correct, r.explain, r.diff]
-          .map(v => (v||'').replace(/,/g,'，'))  // CSVカンマエスケープ
+          .map(v => (v||'').replace(/,/g, '，'))
           .join(',')
       );
-      // ファイル末尾が改行で終わっているか確認して追記
       const current = fs.existsSync(CSV_PATH) ? fs.readFileSync(CSV_PATH, 'utf-8') : '';
-      const separator = current.endsWith('\n') ? '' : '\n';
-      fs.appendFileSync(CSV_PATH, separator + lines.join('\n') + '\n');
+      const sep = current.endsWith('\n') ? '' : '\n';
+      fs.appendFileSync(CSV_PATH, sep + lines.join('\n') + '\n');
 
       let gitResult = '';
       try {
         const out = execSync(
           `cd "${ROOT}" && git add questions.csv && git commit -m "AI生成問題を追加 (${rows.length}問)" && git push`,
-          { encoding: 'utf-8', timeout: 30000 }
+          { encoding:'utf-8', timeout:30000 }
         );
-        gitResult = `git push 成功 (${rows.length}問追加)\n${out}`;
+        gitResult = `git push 成功 (${rows.length}問追加)\n` + out;
       } catch(e) {
         gitResult = `⚠ git エラー（CSV追記は完了）:\n${e.message}`;
       }
-      jsonRes(res, { ok: true, gitResult, count: rows.length });
-    } catch(e) {
-      jsonRes(res, { error: e.message }, 500);
-    }
+      jsonRes(res, { ok:true, gitResult, count:rows.length });
+    } catch(e) { jsonRes(res, { error: e.message }, 500); }
     return;
   }
 
@@ -529,8 +563,12 @@ http.createServer(async (req, res) => {
   res.end('Not Found');
 
 }).listen(PORT, () => {
-  console.log(`\n📊 マイクラ学習 ダッシュボード 起動中`);
-  console.log(`   → http://localhost:${PORT}`);
-  console.log(`\n   ※ ANTHROPIC_API_KEY が未設定の場合は tools/.env を作成してください`);
-  if (!process.env.ANTHROPIC_API_KEY) console.warn(`   ⚠ ANTHROPIC_API_KEY が設定されていません\n`);
+  console.log('\n📊 マイクラ学習 ダッシュボード');
+  console.log(`   ダッシュボード → http://localhost:${PORT}/`);
+  console.log(`   ゲーム (local) → http://localhost:${PORT}/game/`);
+  console.log('\n   ① ゲームは http://localhost:3001/game/ で開く');
+  console.log('   ② ダッシュボード http://localhost:3001/ でボタンを押すだけ');
+  if (!process.env.ANTHROPIC_API_KEY) {
+    console.warn('\n   ⚠ ANTHROPIC_API_KEY が未設定です。tools/.env を作成してください。\n');
+  }
 });
