@@ -146,6 +146,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>📊 マイクラ学習 ダッシュボード</title>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:#1a1a2e;color:#ddd;font-family:monospace,sans-serif;min-height:100vh;padding:16px 20px}
@@ -210,17 +211,46 @@ tr:hover td{background:#1a2a3a}
   <span class="flow-step">📱 自動反映</span>
 </div>
 
+<!-- 🔑 セットアップ -->
+<section id="setup-section">
+  <h2>🔑 セットアップ <span id="setup-badge" style="font-size:.78rem;color:#5dbb63;margin-left:8px"></span></h2>
+  <div id="setup-body">
+    <div style="font-size:.83rem;color:#8899aa;margin-bottom:12px">一度設定すれば、タブレット→PCへの統計転送が完全自動になります。</div>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start">
+      <div style="flex:1;min-width:260px">
+        <div style="margin-bottom:10px">
+          <div style="color:#88ccff;font-size:.85rem;margin-bottom:5px">① GitHub PAT を発行（gistスコープ）</div>
+          <a class="btn btn-blue btn-sm" href="https://github.com/settings/tokens/new?scopes=gist&description=minecraft-learning-sync" target="_blank" style="text-decoration:none;display:inline-block">🔑 PATを発行する ↗</a>
+        </div>
+        <div style="margin-bottom:10px">
+          <div style="color:#88ccff;font-size:.85rem;margin-bottom:5px">② トークンを入力して保存</div>
+          <div style="display:flex;gap:6px">
+            <input type="password" id="gist-token" placeholder="ghp_..." style="flex:1;padding:7px 10px;background:#1a1a2a;border:1px solid #444;color:#eee;border-radius:4px;font-family:monospace;font-size:.8rem">
+            <button class="btn btn-sm" onclick="saveSetup()">💾 保存</button>
+          </div>
+        </div>
+        <div>
+          <div style="color:#88ccff;font-size:.85rem;margin-bottom:5px">ゲームのURL（GitHub Pages）</div>
+          <input type="text" id="game-url" placeholder="https://ichishio.github.io/minecraft-learning-3d/" style="width:100%;padding:7px 10px;background:#1a1a2a;border:1px solid #444;color:#eee;border-radius:4px;font-size:.78rem">
+        </div>
+      </div>
+      <div id="qr-container" style="text-align:center;display:none;flex-shrink:0">
+        <div style="color:#5dbb63;font-size:.85rem;margin-bottom:6px;font-weight:bold">③ タブレットでスキャン</div>
+        <canvas id="qr-canvas" style="border-radius:8px;background:#fff;padding:6px;display:block;margin:0 auto"></canvas>
+        <div style="font-size:.75rem;color:#aaa;margin-top:6px">カメラを向けるだけで<br>ゲームに自動設定！</div>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- ① 統計読み込み -->
 <section>
-  <h2>① せいせきを読み込む</h2>
-  <div style="background:#0d1e38;border:1px solid #2a5a8a;border-radius:6px;padding:14px;margin-bottom:14px">
-    <div style="color:#88ccff;font-size:.88rem;margin-bottom:8px">☁️ <strong>Gistから自動読み込み</strong>（タブレットで「クラウド同期」を設定済みの場合）</div>
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-      <input type="password" id="gist-token" placeholder="ghp_... （gistスコープのトークン）" style="flex:1;min-width:200px;padding:7px 10px;background:#1a1a2a;border:1px solid #444;color:#eee;border-radius:4px;font-family:monospace;font-size:.82rem">
-      <button class="btn btn-blue btn-sm" onclick="loadFromGist()">☁️ Gistから読み込む</button>
-    </div>
-    <div id="gist-status" style="font-size:.78rem;color:#888;margin-top:6px"></div>
+  <h2>① せいせき</h2>
+  <div id="gist-auto-bar" style="background:#0d1e38;border:1px solid #2a5a8a;border-radius:6px;padding:10px 14px;margin-bottom:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+    <span id="gist-auto-status" style="flex:1;font-size:.88rem;color:#8899aa">☁️ セットアップが完了するとここに自動読み込みされます</span>
+    <button class="btn btn-sm btn-blue" onclick="refreshFromGist()">🔄 再読み込み</button>
   </div>
+  <div id="gist-status" style="font-size:.78rem;color:#aaa;margin-bottom:10px"></div>
   <div style="color:#667788;font-size:.8rem;text-align:center;margin-bottom:10px">── または ファイルで読み込む ──</div>
   <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
     <span class="dz-icon">📂</span>
@@ -323,32 +353,59 @@ function readJsonFile(file) {
   reader.readAsText(file);
 }
 
-// ===== Gist 読み込み =====
-async function loadFromGist() {
+// ===== セットアップ 永続化 =====
+const DASH_TOKEN_KEY = 'mclearn_dash_token_v1';
+const DASH_GAMEURL_KEY = 'mclearn_dash_gameurl_v1';
+
+function saveSetup() {
   const token = document.getElementById('gist-token').value.trim();
+  const gameUrl = document.getElementById('game-url').value.trim();
+  if (!token) { alert('トークンを入力してください'); return; }
+  localStorage.setItem(DASH_TOKEN_KEY, token);
+  if (gameUrl) localStorage.setItem(DASH_GAMEURL_KEY, gameUrl);
+  generateQR(token, gameUrl);
+  document.getElementById('setup-badge').textContent = '✅ 設定済み';
+  refreshFromGist(token);
+}
+
+function generateQR(token, gameUrl) {
+  if (!token || typeof QRCode === 'undefined') return;
+  const url = (gameUrl || localStorage.getItem(DASH_GAMEURL_KEY) || 'https://ichishio.github.io/minecraft-learning-3d/').replace(/\\/?$/, '/') + '#t=' + token;
+  const canvas = document.getElementById('qr-canvas');
+  QRCode.toCanvas(canvas, url, { width: 180, margin: 1 }, function(err) {
+    if (!err) document.getElementById('qr-container').style.display = 'block';
+  });
+}
+
+// ===== Gist 読み込み =====
+async function loadFromGist(token) {
+  token = token || localStorage.getItem(DASH_TOKEN_KEY) || '';
   const statusEl = document.getElementById('gist-status');
-  const loadStatusEl = document.getElementById('load-status');
-  if (!token) { statusEl.textContent = '⚠️ トークンを入力してください'; return; }
-  statusEl.textContent = '⏳ Gistを検索中...';
+  const autoStatusEl = document.getElementById('gist-auto-status');
+  if (!token) { autoStatusEl.textContent = '☁️ セットアップでトークンを設定してください'; return; }
+  autoStatusEl.textContent = '⏳ Gistを検索中...';
   try {
     const headers = { 'Authorization': 'Bearer ' + token };
     const r1 = await fetch('https://api.github.com/gists', { headers });
-    if (!r1.ok) throw new Error('認証失敗（HTTP ' + r1.status + '）。トークンを確認してください');
+    if (!r1.ok) throw new Error('認証失敗（HTTP ' + r1.status + '）');
     const gists = await r1.json();
     const gist = gists.find(g => g.files && g.files['minecraft-stats.json']);
-    if (!gist) { statusEl.textContent = '⚠️ Gistが見つかりません。タブレットで同期を実行してください'; return; }
-    statusEl.textContent = '⏳ データを読み込み中...';
+    if (!gist) { autoStatusEl.textContent = '⚠️ Gistが見つかりません。タブレットで同題を解くと同期されます'; return; }
+    autoStatusEl.textContent = '⏳ データを読み込み中...';
     const r2 = await fetch('https://api.github.com/gists/' + gist.id, { headers });
     const detail = await r2.json();
     const content = JSON.parse(detail.files['minecraft-stats.json'].content);
     const syncedAt = content.syncedAt ? new Date(content.syncedAt).toLocaleString('ja-JP') : '不明';
-    statusEl.textContent = '✅ 同期日時: ' + syncedAt;
+    autoStatusEl.textContent = '✅ 自動読み込み完了  同期日時: ' + syncedAt;
+    statusEl.textContent = '';
     await processStats(content);
-    loadStatusEl.textContent = '';
+    document.getElementById('load-status').textContent = '';
   } catch(e) {
-    statusEl.textContent = '❌ エラー: ' + e.message;
+    autoStatusEl.textContent = '❌ エラー: ' + e.message;
   }
 }
+
+function refreshFromGist() { loadFromGist(); }
 
 // ===== localhost 開発用 =====
 async function loadFromLocalStorage() {
@@ -565,6 +622,21 @@ async function implementQuestions() {
 }
 
 function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ===== 起動時の自動初期化 =====
+(function autoInit() {
+  const token = localStorage.getItem(DASH_TOKEN_KEY);
+  const gameUrl = localStorage.getItem(DASH_GAMEURL_KEY) || '';
+  if (token) {
+    document.getElementById('gist-token').value = token;
+    document.getElementById('setup-badge').textContent = '✅ 設定済み';
+    if (gameUrl) document.getElementById('game-url').value = gameUrl;
+    setTimeout(() => {
+      generateQR(token, gameUrl);
+      loadFromGist(token);
+    }, 400); // QRライブラリのロード待ち
+  }
+})();
 </script>
 </body>
 </html>`;

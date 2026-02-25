@@ -3220,6 +3220,14 @@ addEventListener('load', () => {
 
     game = new Game();
     game.settings = game.loadSettings();
+    // URLハッシュ経由のトークン自動設定 ( #t=TOKEN ) — QRスキャン時
+    const _urlToken = new URLSearchParams(location.hash.replace(/^#/, '')).get('t');
+    if (_urlToken) {
+      game.settings.githubToken = _urlToken;
+      game.saveSettings();
+      history.replaceState(null, '', location.pathname + location.search);
+      game._setupToastPending = true;
+    }
     game.state = game.loadState();
     await game.loadCustomQuestions();
     game._restoreTodayLog();
@@ -3235,6 +3243,10 @@ addEventListener('load', () => {
       setTimeout(() => {
         document.getElementById('loading-screen').classList.add('hidden');
         document.getElementById('title-screen').classList.remove('hidden');
+        if (game._setupToastPending) {
+          game._setupToastPending = false;
+          setTimeout(() => game._showToast('☁️ クラウド同期の設定が完了しました！\n問題を解くと自動で同期されます'), 800);
+        }
 
         document.getElementById('btn-start').addEventListener('click', () => {
           game.resetState();
