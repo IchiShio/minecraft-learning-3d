@@ -3579,7 +3579,11 @@ addEventListener('load', () => {
           game.exportStats();
         });
         const syncNowBtn = document.getElementById('btn-sync-now');
-        if (syncNowBtn) syncNowBtn.addEventListener('click', () => game.syncStatsToGitHub());
+        if (syncNowBtn) syncNowBtn.addEventListener('click', () => {
+          const tokenEl = document.getElementById('settings-token');
+          if (tokenEl) game.settings.githubToken = tokenEl.value.trim();
+          game.syncStatsToGitHub();
+        });
 
         // スピードボタン
         document.querySelectorAll('.speed-btn').forEach(btn => {
