@@ -97,24 +97,36 @@ const WORLD_ZONES = [
 // ===== BUILDING ACTION DEFINITIONS =====
 // 各建物で1回できるアクション（問題を解くと実行できる）
 const BUILDING_ACTIONS = {
-  cabin:   { icon:'🛌', label:'ねる',          pos:[-3,-2], subj:'math',     reward:{ xp:20 },             cooldown:120000 },
-  tanbo:   { icon:'🌾', label:'しゅうかくする', pos:[-3,-3], subj:'japanese', reward:{ xp:15, item:'wood' },  cooldown:90000  },
-  mine:    { icon:'⛏️', label:'ほる',           pos:[0,-3],  subj:'math',     reward:{ xp:15, item:'stone'}, cooldown:90000  },
-  market:  { icon:'🤝', label:'こうえきする',   pos:[0,0],   subj:'english',  reward:{ xp:20 },             cooldown:120000 },
-  well:    { icon:'💧', label:'みずくむ',        pos:[0,0],   subj:'japanese', reward:{ xp:15 },             cooldown:60000  },
-  onsen:   { icon:'♨️', label:'にゅうよくする', pos:[0,0],   subj:'math',     reward:{ xp:25 },             cooldown:180000 },
-  forge:   { icon:'🔨', label:'うちきをする',   pos:[0,-1],  subj:'math',     reward:{ xp:20, item:'iron' }, cooldown:120000 },
-  shrine:  { icon:'🙏', label:'おまいりする',   pos:[0,-3],  subj:'japanese', reward:{ xp:20 },             cooldown:120000 },
-  guild:   { icon:'📋', label:'いらいをうける', pos:[0,-2],  subj:'english',  reward:{ xp:25 },             cooldown:120000 },
-  garden:  { icon:'🪴', label:'みずやりする',   pos:[0,2],   subj:'japanese', reward:{ xp:15 },             cooldown:60000  },
-  tower:   { icon:'🔭', label:'かんさつする',   pos:[-3,-2], subj:'math',     reward:{ xp:20 },             cooldown:120000 },
-  library: { icon:'📖', label:'どくしょする',   pos:[-3,2],  subj:'japanese', reward:{ xp:25 },             cooldown:120000 },
-  port:    { icon:'🎣', label:'つりをする',     pos:[-2,-1], subj:'math',     reward:{ xp:15 },             cooldown:60000  },
-  castle:  { icon:'👑', label:'たいざする',     pos:[0,-4],  subj:'english',  reward:{ xp:30 },             cooldown:180000 },
-  dragon:  { icon:'💰', label:'たからをとる',   pos:[-3,-3], subj:'math',     reward:{ xp:35, item:'gold' }, cooldown:300000 },
-  sky:     { icon:'✨', label:'こうだんする',   pos:[0,-3],  subj:'english',  reward:{ xp:30 },             cooldown:180000 },
-  rainbow: { icon:'🌈', label:'とびこむ',       pos:[0,2],   subj:'english',  reward:{ xp:40, item:'diamond'}, cooldown:600000 },
+  cabin:   { icon:'🛌', label:'ねる',          pos:[-3,-2], subj:'math',     reward:{ xp:20 },              cooldown:60000  },
+  tanbo:   { icon:'🌾', label:'しゅうかくする', pos:[-3,-3], subj:'japanese', reward:{ xp:15, item:'wood' },  cooldown:45000  },
+  mine:    { icon:'⛏️', label:'ほる',           pos:[0,-3],  subj:'math',     reward:{ xp:15, item:'stone' }, cooldown:45000  },
+  market:  { icon:'🤝', label:'こうえきする',   pos:[0,0],   subj:'english',  reward:{ xp:20 },              cooldown:60000  },
+  well:    { icon:'💧', label:'みずくむ',        pos:[0,0],   subj:'japanese', reward:{ xp:15 },              cooldown:30000  },
+  onsen:   { icon:'♨️', label:'にゅうよくする', pos:[0,0],   subj:'math',     reward:{ xp:25 },              cooldown:90000  },
+  forge:   { icon:'🔨', label:'うちきをする',   pos:[0,-1],  subj:'math',     reward:{ xp:20, item:'iron' },  cooldown:60000  },
+  shrine:  { icon:'🙏', label:'おまいりする',   pos:[0,-3],  subj:'japanese', reward:{ xp:20 },              cooldown:60000  },
+  guild:   { icon:'📋', label:'いらいをうける', pos:[0,-2],  subj:'english',  reward:{ xp:25 },              cooldown:60000  },
+  garden:  { icon:'🪴', label:'みずやりする',   pos:[0,2],   subj:'japanese', reward:{ xp:15 },              cooldown:30000  },
+  tower:   { icon:'🔭', label:'かんさつする',   pos:[-3,-2], subj:'math',     reward:{ xp:20 },              cooldown:60000  },
+  library: { icon:'📖', label:'どくしょする',   pos:[-3,2],  subj:'japanese', reward:{ xp:25 },              cooldown:60000  },
+  port:    { icon:'🎣', label:'つりをする',     pos:[-2,-1], subj:'math',     reward:{ xp:15 },              cooldown:30000  },
+  castle:  { icon:'👑', label:'たいざする',     pos:[0,-4],  subj:'english',  reward:{ xp:30 },              cooldown:90000  },
+  dragon:  { icon:'💰', label:'たからをとる',   pos:[-3,-3], subj:'math',     reward:{ xp:35, item:'gold' },  cooldown:150000 },
+  sky:     { icon:'✨', label:'こうだんする',   pos:[0,-3],  subj:'english',  reward:{ xp:30 },              cooldown:90000  },
+  rainbow: { icon:'🌈', label:'とびこむ',       pos:[0,2],   subj:'english',  reward:{ xp:40, item:'diamond'},cooldown:300000 },
 };
+
+// ===== TREASURE CHESTS =====
+const TREASURE_SPAWNS = [
+  { pos:[ 3, 0, -4],  subject:'math'     },
+  { pos:[-7, 0,  2],  subject:'japanese' },
+  { pos:[10, 0,-13],  subject:'english'  },
+  { pos:[-14,0,  5],  subject:'math'     },
+  { pos:[ 5, 0, 17],  subject:'japanese' },
+  { pos:[-5, 0,-13],  subject:'english'  },
+];
+const COMBO_MILESTONES = [3, 5, 7, 10]; // コンボボーナス発動ストリーク数
+const COMBO_BONUS_XP   = 8;             // コンボ1段階あたりのボーナスXP
 
 // ===== CHARACTER DEFINITIONS =====
 const CHARACTER_DEFS = [
@@ -231,10 +243,12 @@ class Game {
     this.cameraDist = 11;
     this.buildingGroups = {};
     this.resourceNodes = [];
+    this.treasureChests = [];
     this.keys = {};
     this.joystick = { active: false, x: 0, y: 0 };
     this.nearResource = null;
     this.nearBuilding = null;
+    this.nearTreasure = null;
     this.mining = null;
     this.gameRunning = false;
     this.frame = 0;
@@ -465,7 +479,7 @@ class Game {
   selectAdaptiveQuestions(subject, count) {
     const sd = this.quizData[subject];
     const maxGrade = GRADE_FOR_LEVEL(this.state.level);
-    const reviewPool = [], normalPool = [], previewPool = [];
+    const reviewPool = [], normalPool = [], previewPool = [], solvedPool = [];
     const shuf = arr => [...arr].sort(() => Math.random()-0.5);
 
     Object.entries(sd.grades).forEach(([grade, qs]) => {
@@ -476,6 +490,8 @@ class Game {
         if (diff === 'easy' && q.diff === 'hard') return;
         if (diff === 'normal' && q.diff === 'hard') return;
         const stat = this.playerStats[q.id] || { seen:0, correct:0, wrong:0 };
+        // 正解済みの問題はスキップ（定着バリアントプールへ）
+        if (stat.correct > 0) { if (g <= maxGrade) solvedPool.push(q); return; }
         const isWeak = stat.seen >= 2 && stat.wrong > stat.correct;
         if (g > maxGrade)      previewPool.push(q);
         else if (isWeak)       reviewPool.push(q);
@@ -489,21 +505,63 @@ class Game {
 
     const selected = [];
     const pick = (pool, n) => shuf(pool).slice(0, n);
-    // adaptiveBias (-2〜+2) でプール比率を調整
     const bias = this.state ? (this.state.adaptiveBias || 0) : 0;
     const diff = this.settings ? this.settings.difficulty : 'normal';
-    // easy設定中はpreviewを出さない; bias>0でpreviewを増やす
     const maxPreview = (diff === 'easy') ? 0 : Math.max(0, Math.min(bias, 2));
-    // bias<0でreviewを最大3問に増やし苦手を繰り返す
     const maxReview  = bias < 0 ? 3 : 2;
     selected.push(...pick(reviewPool, Math.min(maxReview, reviewPool.length)));
     selected.push(...pick(normalPool, Math.min(count - selected.length - maxPreview, normalPool.length)));
     if (maxPreview && previewPool.length) selected.push(...pick(previewPool, Math.min(maxPreview, previewPool.length)));
+
+    // 問題が足りない場合、解済み問題の定着バリアントで補充
+    if (selected.length < count && solvedPool.length) {
+      shuf(solvedPool).slice(0, count - selected.length).forEach(q => {
+        const v = this.generateRetentionVariant(q);
+        if (v) selected.push(v);
+      });
+    }
+    // それでも足りなければ全プールから
     if (selected.length < count) {
       const rest = [...reviewPool, ...normalPool, ...previewPool].filter(q => !selected.includes(q));
       selected.push(...pick(rest, count - selected.length));
     }
     return selected.slice(0, count);
+  }
+
+  generateRetentionVariant(q) {
+    // truefalse問題: 答えの数値を微妙に変えた「定着確認」バリアントを生成
+    if (q.type === 'truefalse') {
+      const nums = q.q.match(/\d+/g);
+      if (nums && nums.length >= 1) {
+        const lastNum = parseInt(nums[nums.length - 1]);
+        const delta = lastNum > 5 ? (Math.random() > 0.5 ? 2 : -2) : (Math.random() > 0.5 ? 1 : 2);
+        const newNum = Math.max(1, lastNum + delta);
+        const re = new RegExp('(^|\\D)' + lastNum + '(\\D|$)');
+        const newQText = q.q.replace(re, (m, pre, suf) => pre + newNum + suf);
+        return {
+          ...q,
+          id: 'ret_' + q.id,
+          q: '【かくにん】' + newQText,
+          correct: 1, // 数値を変えたので×になる（元が○でも×でも、変えた値は不正解）
+          opts: ['○', '×'],
+        };
+      }
+    }
+    // 選択肢問題: シャッフルして選択肢の位置記憶を防ぐ
+    if (q.opts && q.opts.length >= 3) {
+      const correctAnswer = q.opts[q.correct];
+      const wrongs = q.opts.filter((_, i) => i !== q.correct);
+      const shuf = arr => [...arr].sort(() => Math.random() - 0.5);
+      const newOpts = shuf([correctAnswer, ...wrongs]);
+      return {
+        ...q,
+        id: 'ret_' + q.id,
+        opts: newOpts,
+        correct: newOpts.indexOf(correctAnswer),
+        q: '【かくにん】' + q.q,
+      };
+    }
+    return null;
   }
 
   generateMathPool(maxGrade) {
@@ -921,6 +979,7 @@ class Game {
     this.buildPlayer(this.currentChar);
     this.buildBuildings();
     this.buildResourceNodes();
+    this.buildTreasureChests();
     this.spawnMobs();
     this.setupControls();
     this.loop();
@@ -1242,6 +1301,29 @@ class Game {
       mesh.castShadow = true;
       this.scene.add(mesh);
       this.resourceNodes.push({ def, mesh, depleted: false, respawnAt: 0, idx });
+    });
+  }
+
+  buildTreasureChests() {
+    this.treasureChests = [];
+    TREASURE_SPAWNS.forEach((spawn, idx) => {
+      // 箱本体（茶色）
+      const bodyMat = new THREE.MeshLambertMaterial({ color: 0x8B5E3C });
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.6, 0.7), bodyMat);
+      // 蓋（金色）
+      const lidMat = new THREE.MeshLambertMaterial({ color: 0xFFD700 });
+      const lid = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.25, 0.7), lidMat);
+      lid.position.y = 0.42;
+      body.add(lid);
+      body.position.set(spawn.pos[0], 0.3, spawn.pos[2]);
+      body.castShadow = true;
+      this.scene.add(body);
+      // 📦 浮遊インジケーター（DOM overlay）
+      const sparkleEl = document.createElement('div');
+      sparkleEl.textContent = '📦';
+      sparkleEl.style.cssText = 'position:fixed;font-size:1.5rem;pointer-events:none;z-index:50;opacity:0;transition:opacity 0.3s;';
+      document.body.appendChild(sparkleEl);
+      this.treasureChests.push({ spawn, mesh: body, depleted: false, respawnAt: 0, sparkleEl, idx });
     });
   }
 
@@ -1887,6 +1969,29 @@ class Game {
         node.mesh.material.color.setHex(node.def.color);
       }
     });
+    // Treasure chest respawn + sparkle indicator
+    this.treasureChests.forEach(chest => {
+      if (chest.depleted && now >= chest.respawnAt) {
+        chest.depleted = false;
+        chest.mesh.visible = true;
+      }
+      if (!chest.depleted && !this.insideBuilding) {
+        const v = chest.mesh.position.clone().add(new THREE.Vector3(0, 1.6, 0)).project(this.camera);
+        if (v.z < 1) {
+          const sx = (v.x * 0.5 + 0.5) * window.innerWidth;
+          const sy = (-v.y * 0.5 + 0.5) * window.innerHeight;
+          const dist = chest.mesh.position.distanceTo(this.player.position);
+          chest.sparkleEl.style.left = sx + 'px';
+          chest.sparkleEl.style.top  = sy + 'px';
+          chest.sparkleEl.style.opacity = dist < 25 ? '1' : '0';
+          chest.sparkleEl.style.transform = `translate(-50%,-50%) scale(${Math.max(0.5, 1 - dist * 0.03)})`;
+        } else {
+          chest.sparkleEl.style.opacity = '0';
+        }
+      } else {
+        chest.sparkleEl.style.opacity = '0';
+      }
+    });
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -2011,6 +2116,14 @@ class Game {
       if (d < nrd) { nrd = d; nr = node; }
     });
 
+    // Find nearest treasure chest
+    let nt = null, ntd = 3.5;
+    this.treasureChests.forEach(chest => {
+      if (chest.depleted) return;
+      const d = Math.hypot(px - chest.spawn.pos[0], pz - chest.spawn.pos[2]);
+      if (d < ntd) { ntd = d; nt = chest; }
+    });
+
     // Find nearest building
     let nb = null, nbd = 5;
     BUILDING_DEFS.forEach(b => {
@@ -2019,7 +2132,9 @@ class Game {
     });
 
     if (nr && nr !== this.nearResource) this.playSe('portal');
+    if (nt && nt !== this.nearTreasure) this.playSe('portal');
     this.nearResource = nr;
+    this.nearTreasure = nt;
     this.nearBuilding = nb;
 
     const hint = document.getElementById('interact-hint');
@@ -2028,6 +2143,11 @@ class Game {
 
     if (nr) {
       hint.textContent = `${nr.def.icon} ${nr.def.name}をほる：E / タップ！`;
+      hint.classList.remove('hidden');
+      btnI.classList.remove('hidden');
+      popup.classList.add('hidden');
+    } else if (nt) {
+      hint.textContent = `📦 宝箱を あける：E / タップ！`;
       hint.classList.remove('hidden');
       btnI.classList.remove('hidden');
       popup.classList.add('hidden');
@@ -2098,6 +2218,8 @@ class Game {
     }
     if (this.nearResource && !this.mining) {
       this.startMining(this.nearResource);
+    } else if (this.nearTreasure && !this.mining) {
+      this.startTreasureQuiz(this.nearTreasure);
     } else if (this.nearBuilding && this.nearBuilding.cond(this.state)) {
       this.enterBuilding(this.nearBuilding);
     }
@@ -2144,6 +2266,18 @@ class Game {
     });
     if (bestR) {
       this.moveTarget = { x: bestR.mesh.position.x, z: bestR.mesh.position.z, interact: true };
+      return;
+    }
+
+    // Snap to nearest treasure chest within 6 units
+    let bestT = null, bestTd = 6;
+    this.treasureChests.forEach(chest => {
+      if (chest.depleted) return;
+      const d = Math.hypot(hx - chest.spawn.pos[0], hz - chest.spawn.pos[2]);
+      if (d < bestTd) { bestTd = d; bestT = chest; }
+    });
+    if (bestT) {
+      this.moveTarget = { x: bestT.spawn.pos[0], z: bestT.spawn.pos[2], interact: true };
       return;
     }
 
@@ -2751,18 +2885,39 @@ class Game {
   // ===== RESOURCE MINING =====
   startMining(node) {
     const def = node.def;
-    // Pick 1 question for this resource type/difficulty
     const allQ = this.selectAdaptiveQuestions(def.subject, 1);
     if (!allQ.length) return;
     const q = allQ[0];
-    const alreadySolved = !!(this.playerStats[q.id] && this.playerStats[q.id].correct > 0);
-    this.mining = { node, q, alreadySolved };
+    this.mining = { node, q };
     this.playBgm('quiz');
 
     document.getElementById('mining-item-icon').textContent = def.icon;
-    document.getElementById('mining-item-name').textContent = alreadySolved
-      ? `${def.name}（もう といた！アイテムなし）`
-      : `${def.name}をGetしよう！`;
+    document.getElementById('mining-item-name').textContent = `${def.name}をGetしよう！`;
+    document.getElementById('mining-question').textContent = q.q;
+
+    const optsEl = document.getElementById('mining-options');
+    optsEl.innerHTML = '';
+    q.opts.forEach((opt, i) => {
+      const btn = document.createElement('button');
+      btn.className = 'mining-option';
+      btn.textContent = opt;
+      btn.onclick = () => this.answerMining(i);
+      optsEl.appendChild(btn);
+    });
+
+    document.getElementById('mining-feedback').classList.add('hidden');
+    document.getElementById('mining-popup').classList.remove('hidden');
+  }
+
+  startTreasureQuiz(chest) {
+    const allQ = this.selectAdaptiveQuestions(chest.spawn.subject, 1);
+    if (!allQ.length) return;
+    const q = allQ[0];
+    this.mining = { node: null, q, isTreasure: true, chest };
+    this.playBgm('quiz');
+
+    document.getElementById('mining-item-icon').textContent = '📦';
+    document.getElementById('mining-item-name').textContent = '宝箱を あけよう！';
     document.getElementById('mining-question').textContent = q.q;
 
     const optsEl = document.getElementById('mining-options');
@@ -2782,7 +2937,7 @@ class Game {
   answerMining(idx) {
     const { mining } = this;
     if (!mining) return;
-    const { node, q, alreadySolved } = mining;
+    const { node, q, isTreasure, chest } = mining;
     const ok = idx === q.correct;
 
     document.querySelectorAll('.mining-option').forEach((btn, i) => {
@@ -2791,12 +2946,15 @@ class Game {
       else if (i === idx && !ok) btn.classList.add('wrong');
     });
 
-    this.updateQuestionStat(q.id, ok);
+    // 定着バリアント（ret_プレフィックス）はstatsに記録しない
+    const isRetention = q.id && String(q.id).startsWith('ret_');
+    if (!isRetention) this.updateQuestionStat(q.id, ok);
     this.playSe(ok ? 'correct' : 'wrong');
 
     const fb = document.getElementById('mining-feedback');
-    const subj = node.def.subject;
+    const subj = isTreasure ? chest.spawn.subject : node.def.subject;
     if (!this.todayLog[subj]) this.todayLog[subj] = { c: 0, w: 0 };
+
     if (ok) {
       this.state.totalCorrect++;
       this.state.currentStreak = (this.state.currentStreak || 0) + 1;
@@ -2804,8 +2962,24 @@ class Game {
       this.todayCorrect++;
       this.todayLog[subj].c++;
       this.addXP(XP_PER_CORRECT);
-      if (alreadySolved) {
-        fb.textContent = `✅ せいかい！（もう といた もんだい。アイテムはなし）`;
+
+      // コンボストリークボーナス
+      const streak = this.state.currentStreak;
+      if (COMBO_MILESTONES.includes(streak)) {
+        const bonus = COMBO_BONUS_XP * streak;
+        this.addXP(bonus);
+        setTimeout(() => this._showToast(`🔥 ${streak}れんぞく せいかい！\nボーナス XP ＋${bonus}！`), 1600);
+      }
+
+      if (isTreasure) {
+        const items = ['wood','stone','iron','gold'];
+        const item = items[Math.floor(Math.random() * items.length)];
+        const itemDef = RESOURCE_DEFS[item];
+        this.state.inventory[item] = (this.state.inventory[item] || 0) + 1;
+        this.updateInventoryHUD();
+        this.refreshBuildings();
+        this.checkWorldExpansion();
+        fb.textContent = `✅ せいかい！ 📦 ${itemDef.icon} ${itemDef.name} ＋1こ！`;
       } else {
         fb.textContent = `✅ せいかい！ ${node.def.icon} ${node.def.name} ＋1こ！`;
       }
@@ -2829,14 +3003,14 @@ class Game {
       this.mining = null;
       this.playBgm(this.isNightTime() ? 'night' : 'field');
       if (ok) {
-        if (!alreadySolved) {
-          this.collectItem(node);
+        if (isTreasure) {
+          chest.depleted = true;
+          chest.mesh.visible = false;
+          chest.sparkleEl.style.opacity = '0';
+          chest.respawnAt = Date.now() + 180000; // 3分後リスポーン
+          this.spawnFloatingItem(chest.mesh.position.clone(), '📦');
         } else {
-          // 解済み問題: アイテムなし、ブロックは枯渇させる
-          node.depleted = true;
-          node.mesh.material.color.setHex(0x333333);
-          node.respawnAt = Date.now() + 60000;
-          this.spawnFloatingItem(node.mesh.position.clone(), '📚');
+          this.collectItem(node);
         }
       }
     }, ok ? 1500 : 1200);
@@ -2940,6 +3114,14 @@ class Game {
       this.todayCorrect++;
       this.todayLog[subj].c++;
       this.addXP(act.reward.xp);
+
+      // コンボストリークボーナス
+      const streak = this.state.currentStreak;
+      if (COMBO_MILESTONES.includes(streak)) {
+        const bonus = COMBO_BONUS_XP * streak;
+        this.addXP(bonus);
+        setTimeout(() => this._showToast(`🔥 ${streak}れんぞく せいかい！\nボーナス XP ＋${bonus}！`), 1600);
+      }
 
       if (!this.state.buildingActionCooldown) this.state.buildingActionCooldown = {};
       this.state.buildingActionCooldown[def.id] = Date.now() + act.cooldown;
