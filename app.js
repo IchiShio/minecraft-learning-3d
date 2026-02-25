@@ -2565,11 +2565,14 @@ class Game {
     const allQ = this.selectAdaptiveQuestions(def.subject, 1);
     if (!allQ.length) return;
     const q = allQ[0];
-    this.mining = { node, q };
+    const alreadySolved = !!(this.playerStats[q.id] && this.playerStats[q.id].correct > 0);
+    this.mining = { node, q, alreadySolved };
     this.playBgm('quiz');
 
     document.getElementById('mining-item-icon').textContent = def.icon;
-    document.getElementById('mining-item-name').textContent = `${def.name}をGetしよう！`;
+    document.getElementById('mining-item-name').textContent = alreadySolved
+      ? `${def.name}（もう といた！アイテムなし）`
+      : `${def.name}をGetしよう！`;
     document.getElementById('mining-question').textContent = q.q;
 
     const optsEl = document.getElementById('mining-options');
@@ -2589,7 +2592,7 @@ class Game {
   answerMining(idx) {
     const { mining } = this;
     if (!mining) return;
-    const { node, q } = mining;
+    const { node, q, alreadySolved } = mining;
     const ok = idx === q.correct;
 
     document.querySelectorAll('.mining-option').forEach((btn, i) => {
@@ -2611,7 +2614,11 @@ class Game {
       this.todayCorrect++;
       this.todayLog[subj].c++;
       this.addXP(XP_PER_CORRECT);
-      fb.textContent = `✅ せいかい！ ${node.def.icon} ${node.def.name} ＋1こ！`;
+      if (alreadySolved) {
+        fb.textContent = `✅ せいかい！（もう といた もんだい。アイテムはなし）`;
+      } else {
+        fb.textContent = `✅ せいかい！ ${node.def.icon} ${node.def.name} ＋1こ！`;
+      }
       fb.className = 'mining-feedback correct';
     } else {
       this.state.currentStreak = 0;
@@ -2630,7 +2637,17 @@ class Game {
       document.getElementById('mining-popup').classList.add('hidden');
       this.mining = null;
       this.playBgm(this.isNightTime() ? 'night' : 'field');
-      if (ok) this.collectItem(node);
+      if (ok) {
+        if (!alreadySolved) {
+          this.collectItem(node);
+        } else {
+          // 解済み問題: アイテムなし、ブロックは枯渇させる
+          node.depleted = true;
+          node.mesh.material.color.setHex(0x333333);
+          node.respawnAt = Date.now() + 60000;
+          this.spawnFloatingItem(node.mesh.position.clone(), '📚');
+        }
+      }
     }, ok ? 1500 : 1200);
   }
 
