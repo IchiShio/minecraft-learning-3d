@@ -180,6 +180,16 @@ function renderSummary(data) {
   `;
 }
 
+function qLabel(q) {
+  if (q.q && q.q !== q.id) return q.q;
+  const id = q.id || '';
+  if (id.startsWith('gen_add'))  return '【自動生成】たし算';
+  if (id.startsWith('gen_sub'))  return '【自動生成】ひき算';
+  if (id.startsWith('gen_mult')) return '【自動生成】かけ算';
+  if (id.startsWith('gen_div'))  return '【自動生成】わり算';
+  return '（同期し直すと表示されます）';
+}
+
 function renderTable() {
   const seenOnly = document.getElementById('chk-seen').checked;
   const sort = document.getElementById('sort-sel').value;
@@ -212,7 +222,7 @@ function renderTable() {
       <td><span class="tag">${SUBJ[q.subj] || q.subj}</span></td>
       <td>${q.grade || '?'}年</td>
       <td><span class="tag">${DIFF[q.diff] || q.diff || '-'}</span></td>
-      <td class="q-text">${q.q || q.id}</td>
+      <td class="q-text">${qLabel(q)}</td>
       <td class="ok">${seen > 0 ? ok + '回' : '-'}</td>
       <td class="ng">${seen > 0 ? ng + '回' : '-'}</td>
       <td>${accHtml}</td>
