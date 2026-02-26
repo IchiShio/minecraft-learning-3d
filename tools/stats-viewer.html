@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>📊 マイクラ学習 - 成績確認</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Hiragino Maru Gothic Pro', 'M PLUS Rounded 1c', sans-serif;
+           background: #0e1a0e; color: #e0e0e0; min-height: 100vh; padding: 20px; }
+    h1 { font-size: 1.4rem; color: #6aff20; margin-bottom: 16px; }
+    .setup { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; align-items: center; }
+    input[type=password] { padding: 10px 14px; background: #1a2a1a; border: 2px solid #4a8a3a;
+      border-radius: 8px; color: #fff; font-size: 0.9rem; flex: 1; min-width: 240px; }
+    button { padding: 10px 18px; font-size: 0.9rem; font-weight: 700;
+      background: linear-gradient(180deg,#558844,#2a5522); border: 2px solid #6aaa44;
+      border-radius: 8px; color: #fff; cursor: pointer; white-space: nowrap; }
+    button:hover { opacity: 0.85; }
+    .status { font-size: 0.85rem; }
+    .summary { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+    .sum-card { background: #1a2a1a; border: 1px solid #3a5a2a; border-radius: 10px;
+                padding: 12px 18px; min-width: 90px; }
+    .sum-label { font-size: 0.72rem; color: #888; }
+    .sum-value { font-size: 1.4rem; font-weight: 900; }
+    .filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; align-items: center; }
+    .filter-btn { padding: 5px 14px; font-size: 0.8rem; background: #2a2a2a;
+      border: 2px solid #555; border-radius: 20px; color: #bbb; cursor: pointer; }
+    .filter-btn.active { background: #3a7a2a; border-color: #6aff20; color: #fff; }
+    select { padding: 6px 10px; background: #1a2a1a; border: 2px solid #4a8a3a;
+             border-radius: 8px; color: #fff; font-size: 0.85rem; cursor: pointer; }
+    label { font-size: 0.85rem; color: #aaa; display: flex; align-items: center; gap: 4px; cursor: pointer; }
+    .tbl-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+    th { background: #1a3a1a; padding: 10px 8px; text-align: left; color: #8fa;
+         border-bottom: 2px solid #3a6a2a; position: sticky; top: 0; z-index: 1; cursor: pointer; }
+    th:hover { background: #2a4a2a; }
+    td { padding: 9px 8px; border-bottom: 1px solid #1a2a1a; vertical-align: top; }
+    tr:hover td { background: #1a2a1a; }
+    .tag { display: inline-block; font-size: 0.72rem; padding: 1px 7px;
+           border-radius: 8px; background: #2a4a2a; color: #8fa; }
+    .ok { color: #6f6; font-weight: 700; }
+    .ng { color: #f66; font-weight: 700; }
+    .acc-high { color: #4f4; font-weight: 700; }
+    .acc-mid  { color: #ff8; font-weight: 700; }
+    .acc-low  { color: #f44; font-weight: 700; }
+    .unseen   { color: #555; font-style: italic; }
+    .acc-bar  { height: 6px; border-radius: 3px; background: #2a2a2a; margin-top: 4px; min-width: 60px; }
+    .acc-fill { height: 100%; border-radius: 3px; }
+    .q-text   { max-width: 280px; word-break: break-all; line-height: 1.4; }
+    .sync-time { font-size: 0.8rem; color: #888; margin-bottom: 8px; }
+  </style>
+</head>
+<body>
+<h1>📊 マイクラ学習クエスト - 成績確認</h1>
+
+<div class="setup">
+  <input type="password" id="token-input" placeholder="GitHub トークン (gistスコープ)" autocomplete="off">
+  <button id="btn-load">📥 Gistから読み込む</button>
+  <span class="status" id="status"></span>
+</div>
+
+<div id="main" style="display:none">
+  <div class="sync-time" id="sync-time"></div>
+  <div class="summary" id="summary"></div>
+  <div class="filters">
+    <button class="filter-btn active" data-subj="all">全部</button>
+    <button class="filter-btn" data-subj="math">さんすう</button>
+    <button class="filter-btn" data-subj="japanese">こくご</button>
+    <button class="filter-btn" data-subj="english">えいご</button>
+    <select id="sort-sel">
+      <option value="wrong">まちがい数が多い順</option>
+      <option value="acc">正解率が低い順</option>
+      <option value="seen">みた回数が多い順</option>
+      <option value="subj">教科順</option>
+    </select>
+    <label><input type="checkbox" id="chk-seen"> 解いたもののみ表示</label>
+  </div>
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th data-col="subj">教科</th>
+          <th data-col="grade">学年</th>
+          <th data-col="diff">難易度</th>
+          <th>問題文</th>
+          <th data-col="correct">✅ 正解</th>
+          <th data-col="wrong">❌ まちがい</th>
+          <th data-col="acc">正解率</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+const SUBJ = { math:'さんすう', japanese:'こくご', english:'えいご' };
+const DIFF = { easy:'かんたん', normal:'ふつう', hard:'むずかしい' };
+const LS_TOKEN = 'mclearn_viewer_token';
+const LS_GIST  = 'mclearn_viewer_gist';
+
+let allData = [];
+let filterSubj = 'all';
+
+window.addEventListener('load', () => {
+  const t = localStorage.getItem(LS_TOKEN);
+  if (t) document.getElementById('token-input').value = t;
+});
+
+document.getElementById('btn-load').addEventListener('click', loadFromGist);
+
+async function loadFromGist() {
+  const token = document.getElementById('token-input').value.trim();
+  if (!token) { setStatus('トークンを入力してください', '#f88'); return; }
+  localStorage.setItem(LS_TOKEN, token);
+  setStatus('読み込み中...', '#aaa');
+  try {
+    let gistId = localStorage.getItem(LS_GIST);
+    let content = null;
+    if (gistId) content = await fetchContent(token, gistId);
+    if (!content) {
+      setStatus('Gist一覧を検索中...', '#aaa');
+      const res = await fetch('https://api.github.com/gists?per_page=100', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error(`認証エラー (HTTP ${res.status})。トークンを確認してください。`);
+      const list = await res.json();
+      const found = list.find(g => g.files?.['minecraft-stats.json']);
+      if (!found) throw new Error('minecraft-stats.json が見つかりません。ゲームで同期ボタンを押してください。');
+      gistId = found.id;
+      localStorage.setItem(LS_GIST, gistId);
+      content = await fetchContent(token, gistId);
+    }
+    const data = JSON.parse(content);
+    // questions配列形式 or 旧stats形式の両対応
+    if (Array.isArray(data.questions)) {
+      allData = data.questions;
+    } else if (data.stats) {
+      allData = Object.entries(data.stats).map(([id, s]) => ({
+        id, q: id, subj: id.split('_')[0] || '?',
+        grade: parseInt(id.split('_')[1]) || 2, diff: 'normal', ...s
+      }));
+    }
+    const syncedAt = data.syncedAt
+      ? new Date(data.syncedAt).toLocaleString('ja-JP', { year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' })
+      : '不明';
+    document.getElementById('sync-time').textContent = `最終同期: ${syncedAt}`;
+    setStatus('✅ 読み込み完了', '#6f6');
+    renderSummary(data);
+    renderTable();
+    document.getElementById('main').style.display = '';
+  } catch(e) {
+    setStatus('❌ ' + e.message, '#f66');
+  }
+}
+
+async function fetchContent(token, gistId) {
+  const res = await fetch(`https://api.github.com/gists/${gistId}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (!res.ok) { localStorage.removeItem(LS_GIST); return null; }
+  const g = await res.json();
+  return g.files?.['minecraft-stats.json']?.content || null;
+}
+
+function renderSummary(data) {
+  const total  = allData.length;
+  const seen   = allData.filter(q => (q.seen || 0) > 0).length;
+  const cor    = allData.reduce((s, q) => s + (q.correct || 0), 0);
+  const wrg    = allData.reduce((s, q) => s + (q.wrong   || 0), 0);
+  const acc    = cor + wrg > 0 ? Math.round(cor / (cor + wrg) * 100) : 0;
+  const accCol = acc >= 80 ? '#4f4' : acc >= 50 ? '#ff8' : '#f44';
+  document.getElementById('summary').innerHTML = `
+    <div class="sum-card"><div class="sum-label">問題数</div><div class="sum-value" style="color:#fff">${total}</div></div>
+    <div class="sum-card"><div class="sum-label">解いた問題</div><div class="sum-value" style="color:#8ff">${seen}</div></div>
+    <div class="sum-card"><div class="sum-label">総正解数</div><div class="sum-value" style="color:#4f4">${cor}</div></div>
+    <div class="sum-card"><div class="sum-label">総まちがい</div><div class="sum-value" style="color:#f44">${wrg}</div></div>
+    <div class="sum-card"><div class="sum-label">全体正解率</div><div class="sum-value" style="color:${accCol}">${acc}%</div></div>
+    <div class="sum-card"><div class="sum-label">レベル</div><div class="sum-value" style="color:#ff8">Lv.${data.level || 1}</div></div>
+  `;
+}
+
+function renderTable() {
+  const seenOnly = document.getElementById('chk-seen').checked;
+  const sort = document.getElementById('sort-sel').value;
+  let rows = allData.filter(q => filterSubj === 'all' || q.subj === filterSubj);
+  if (seenOnly) rows = rows.filter(q => (q.seen || 0) > 0);
+  rows = [...rows].sort((a, b) => {
+    if (sort === 'wrong') return (b.wrong || 0) - (a.wrong || 0);
+    if (sort === 'acc') {
+      const aA = (a.seen || 0) === 0 ? 999 : (a.correct || 0) / (a.seen || 1);
+      const bA = (b.seen || 0) === 0 ? 999 : (b.correct || 0) / (b.seen || 1);
+      return aA - bA;
+    }
+    if (sort === 'seen') return (b.seen || 0) - (a.seen || 0);
+    if (sort === 'subj') return (a.subj || '').localeCompare(b.subj || '');
+    return 0;
+  });
+
+  document.getElementById('tbody').innerHTML = rows.map(q => {
+    const seen = q.seen || 0;
+    const ok   = q.correct || 0;
+    const ng   = q.wrong   || 0;
+    const acc  = seen > 0 ? Math.round(ok / seen * 100) : null;
+    const accCls  = acc === null ? '' : acc >= 80 ? 'acc-high' : acc >= 50 ? 'acc-mid' : 'acc-low';
+    const fillCol = acc === null ? '' : acc >= 80 ? '#4f4' : acc >= 50 ? '#ff8' : '#f44';
+    const accHtml = acc === null
+      ? '<span class="unseen">未回答</span>'
+      : `<span class="${accCls}">${acc}%</span>
+         <div class="acc-bar"><div class="acc-fill" style="width:${acc}%;background:${fillCol}"></div></div>`;
+    return `<tr>
+      <td><span class="tag">${SUBJ[q.subj] || q.subj}</span></td>
+      <td>${q.grade || '?'}年</td>
+      <td><span class="tag">${DIFF[q.diff] || q.diff || '-'}</span></td>
+      <td class="q-text">${q.q || q.id}</td>
+      <td class="ok">${seen > 0 ? ok + '回' : '-'}</td>
+      <td class="ng">${seen > 0 ? ng + '回' : '-'}</td>
+      <td>${accHtml}</td>
+    </tr>`;
+  }).join('');
+}
+
+document.querySelectorAll('.filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    filterSubj = btn.dataset.subj;
+    renderTable();
+  });
+});
+document.getElementById('sort-sel').addEventListener('change', renderTable);
+document.getElementById('chk-seen').addEventListener('change', renderTable);
+
+function setStatus(msg, color) {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.style.color = color || '#aaa';
+}
+</script>
+</body>
+</html>

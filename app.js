@@ -733,11 +733,18 @@ class Game {
   async syncStatsToGitHub() {
     const token = this.settings.githubToken;
     if (!token) return;
-    const stats = {};
-    Object.entries(this.playerStats).forEach(([id, s]) => {
-      if (s.seen > 0) stats[id] = { seen: s.seen, correct: s.correct, wrong: s.wrong };
+    const questions = [];
+    ['math','japanese','english'].forEach(subj => {
+      const grades = this.quizData?.[subj]?.grades || {};
+      Object.entries(grades).forEach(([grade, qs]) => {
+        qs.forEach(q => {
+          const s = this.playerStats[q.id] || { seen:0, correct:0, wrong:0 };
+          questions.push({ id:q.id, q:q.q, subj, grade:parseInt(grade), diff:q.diff||'normal',
+            seen:s.seen, correct:s.correct, wrong:s.wrong });
+        });
+      });
     });
-    const payload = { syncedAt: new Date().toISOString(), level: this.state.level, stats };
+    const payload = { syncedAt: new Date().toISOString(), level: this.state.level, questions };
     const fileContent = JSON.stringify(payload);
     let gistId = null;
     try { const saved = JSON.parse(localStorage.getItem(SYNC_GIST_KEY) || 'null'); gistId = saved?.id || null; } catch(e) {}
@@ -769,7 +776,7 @@ class Game {
   _scheduleSyncToGitHub() {
     if (!this.settings.githubToken) return;
     if (this._syncTimer) clearTimeout(this._syncTimer);
-    this._syncTimer = setTimeout(() => { this._syncTimer = null; this.syncStatsToGitHub(); }, 30000);
+    this._syncTimer = setTimeout(() => { this._syncTimer = null; this.syncStatsToGitHub(); }, 5000);
   }
 
   _updateSyncStatus() {
