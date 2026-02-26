@@ -766,10 +766,10 @@ class Game {
       const json = await res.json();
       localStorage.setItem(SYNC_GIST_KEY, JSON.stringify({ id: json.id, syncedAt: payload.syncedAt }));
       this._updateSyncStatus();
-      this._showToast('☁️ クラウドに同期しました！');
+      // toast removed — sync success notification not needed on tablet
     } catch(e) {
       console.warn('Gist sync failed:', e);
-      this._showToast('⚠️ 同期に失敗しました');
+      // toast removed — sync failure notification not needed on tablet
     }
   }
 
@@ -3620,7 +3620,6 @@ addEventListener('load', () => {
         }
         if (game._setupToastPending) {
           game._setupToastPending = false;
-          setTimeout(() => game._showToast('☁️ クラウド同期の設定が完了しました！\n問題を解くと自動で同期されます'), 800);
         }
 
         document.getElementById('btn-start').addEventListener('click', () => {
