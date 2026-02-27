@@ -78,6 +78,16 @@ const RESOURCE_SPAWN = [
   {type:'diamond', pos:[23, 0, 10]},
 ];
 
+// ===== CRAFTING =====
+const CRAFT_RECIPES = [
+  { id:'pick_wood',  icon:'⛏️', name:'木のツルハシ',   needs:{wood:3},           reward:{xp:15},   once:false, desc:'XP ＋15' },
+  { id:'shield',     icon:'🛡️', name:'石のたて',       needs:{stone:3},          reward:{hp:1},    once:false, desc:'HP ＋1 かいふく' },
+  { id:'pick_iron',  icon:'⛏️', name:'てつのツルハシ', needs:{iron:2,stone:1},   reward:{xp:30},   once:false, desc:'XP ＋30' },
+  { id:'armor_iron', icon:'🥋', name:'てつのよろい',   needs:{iron:4},           reward:{maxHp:1}, once:true,  desc:'さいだいHP ＋1（1かいのみ）' },
+  { id:'pick_gold',  icon:'⛏️', name:'きんのツルハシ', needs:{gold:3},           reward:{xp:50},   once:false, desc:'XP ＋50' },
+  { id:'armor_dia',  icon:'💎', name:'ダイヤのよろい', needs:{diamond:2},        reward:{maxHp:2}, once:true,  desc:'さいだいHP ＋2（1かいのみ）' },
+];
+
 // ===== ACHIEVEMENTS =====
 const ACHIEVEMENTS = [
   { id:'first_correct',  icon:'🌟', label:'はじめての せいかい！',   cond:(s)   => s.totalCorrect >= 1 },
@@ -556,6 +566,65 @@ class Game {
     if (!el) return;
     const count = (this.state.achievements || []).length;
     el.textContent = `🏅 ${count} / ${ACHIEVEMENTS.length}`;
+  }
+
+  // ===== CRAFTING =====
+  openCraftMenu() {
+    const list = document.getElementById('craft-list');
+    list.innerHTML = '';
+    const inv = this.state.inventory || {};
+    for (const r of CRAFT_RECIPES) {
+      const done = r.once && (this.state.crafted || []).includes(r.id);
+      const canAfford = Object.entries(r.needs).every(([k, v]) => (inv[k] || 0) >= v);
+      const needsHtml = Object.entries(r.needs).map(([k, v]) => {
+        const have = inv[k] || 0;
+        return `<span style="color:${have>=v?'#7cf07c':'#f88'}">${RESOURCE_DEFS[k].icon}×${v}(${have})</span>`;
+      }).join(' ');
+      const div = document.createElement('div');
+      div.className = 'craft-item';
+      div.innerHTML = `
+        <span class="craft-item-icon">${r.icon}</span>
+        <div class="craft-item-info">
+          <div class="craft-item-name">${r.name}</div>
+          <div class="craft-item-needs">${needsHtml}</div>
+          <div class="craft-item-reward">→ ${r.desc}</div>
+          ${done ? '<div class="craft-item-crafted">✅ つくりずみ</div>' : ''}
+        </div>
+        <button class="btn-do-craft" ${!canAfford || done ? 'disabled' : ''} data-id="${r.id}">つくる</button>
+      `;
+      list.appendChild(div);
+    }
+    list.querySelectorAll('.btn-do-craft:not(:disabled)').forEach(btn => {
+      btn.onclick = () => this.doCraft(btn.dataset.id);
+    });
+    document.getElementById('craft-menu').classList.remove('hidden');
+  }
+
+  doCraft(id) {
+    const r = CRAFT_RECIPES.find(x => x.id === id);
+    if (!r) return;
+    const inv = this.state.inventory;
+    for (const [k, v] of Object.entries(r.needs)) inv[k] = (inv[k] || 0) - v;
+    if (r.reward.xp)    this.addXP(r.reward.xp);
+    if (r.reward.hp) {
+      this.playerHp = Math.min(this.playerMaxHp, this.playerHp + r.reward.hp);
+      this._updateHpHud();
+    }
+    if (r.reward.maxHp) {
+      this.playerMaxHp += r.reward.maxHp;
+      this.playerHp = Math.min(this.playerHp + r.reward.maxHp, this.playerMaxHp);
+      this._updateHpHud();
+    }
+    if (r.once) {
+      if (!this.state.crafted) this.state.crafted = [];
+      this.state.crafted.push(r.id);
+    }
+    this.updateInventoryHUD();
+    this.saveState();
+    this.playSe('unlock');
+    this._showToast(`⚒️ ${r.icon} ${r.name} をつくった！`);
+    this.checkAchievements();
+    this.openCraftMenu();
   }
 
   selectAdaptiveQuestions(subject, count) {
@@ -3627,6 +3696,7 @@ class Game {
     document.getElementById('hotbar').classList.add('hidden');
     document.getElementById('btn-home').classList.add('hidden');
     document.getElementById('btn-settings').classList.add('hidden');
+    document.getElementById('btn-craft').classList.add('hidden');
     document.getElementById('mobile-controls').classList.add('hidden');
     document.getElementById('interact-hint').classList.add('hidden');
     document.getElementById('building-popup').classList.add('hidden');
@@ -3652,6 +3722,7 @@ class Game {
     document.getElementById('hotbar').classList.remove('hidden');
     document.getElementById('btn-home').classList.remove('hidden');
     document.getElementById('btn-settings').classList.remove('hidden');
+    document.getElementById('btn-craft').classList.remove('hidden');
     if (this.isMobile) document.getElementById('mobile-controls').classList.remove('hidden');
     // モブ・昼夜リセット
     this.spawnMobs();
@@ -3765,6 +3836,12 @@ addEventListener('load', () => {
             document.querySelectorAll('.diff-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
           });
+        });
+
+        // クラフトメニュー
+        document.getElementById('btn-craft').addEventListener('click', () => game.openCraftMenu());
+        document.getElementById('btn-craft-close').addEventListener('click', () => {
+          document.getElementById('craft-menu').classList.add('hidden');
         });
 
         // 建物から出るボタン

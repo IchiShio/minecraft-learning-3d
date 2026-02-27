@@ -270,6 +270,69 @@ html, body {
 }
 .hud-settings-btn:active { opacity: 0.7; }
 
+.hud-craft-btn {
+  position: fixed;
+  top: max(12px, env(safe-area-inset-top));
+  left: max(250px, calc(230px + env(safe-area-inset-left)));
+  background: rgba(0,0,0,0.7);
+  color: #ffd700;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 0.75rem;
+  font-family: inherit;
+  font-weight: bold;
+  cursor: pointer;
+  z-index: 10;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.hud-craft-btn:active { opacity: 0.7; }
+.hud-craft-btn.hidden { display: none; }
+
+/* ===== CRAFT MENU ===== */
+#craft-menu {
+  position: fixed; inset: 0; z-index: 400;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,0.75);
+}
+#craft-menu.hidden { display: none; }
+.craft-inner {
+  background: #1a1a2e;
+  border: 2px solid #4a90d9;
+  border-radius: 12px;
+  padding: 16px;
+  max-width: 340px; width: 90%;
+  max-height: 80vh; overflow-y: auto;
+}
+.craft-title { font-size: 1.1rem; color: #ffd700; font-weight: 900; margin-bottom: 12px; text-align: center; }
+.craft-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px; background: #0d0d1a;
+  border-radius: 8px; margin-bottom: 8px;
+}
+.craft-item-icon { font-size: 1.5rem; }
+.craft-item-info { flex: 1; }
+.craft-item-name { font-size: 0.85rem; color: #fff; font-weight: bold; }
+.craft-item-needs { font-size: 0.75rem; color: #aaa; margin-top: 2px; }
+.craft-item-reward { font-size: 0.75rem; color: #7cf07c; margin-top: 2px; }
+.craft-item-crafted { font-size: 0.7rem; color: #888; }
+.btn-do-craft {
+  background: linear-gradient(180deg, #6cf, #39a);
+  border: none; border-radius: 6px;
+  color: #fff; font-size: 0.8rem; font-family: inherit;
+  padding: 6px 12px; cursor: pointer;
+  white-space: nowrap; touch-action: manipulation;
+}
+.btn-do-craft:disabled { background: #444; color: #888; cursor: not-allowed; }
+#btn-craft-close {
+  display: block; margin: 12px auto 0;
+  background: #555; color: #fff; border: none;
+  border-radius: 8px; padding: 8px 24px;
+  cursor: pointer; font-size: 0.9rem; font-family: inherit;
+  touch-action: manipulation;
+}
+
 /* ===== SETTINGS PANEL ===== */
 #settings-panel {
   position: fixed; inset: 0;
