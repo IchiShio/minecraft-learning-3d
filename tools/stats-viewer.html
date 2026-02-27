@@ -48,6 +48,9 @@
     .acc-fill { height: 100%; border-radius: 3px; }
     .q-text   { max-width: 280px; word-break: break-all; line-height: 1.4; }
     .sync-time { font-size: 0.8rem; color: #888; margin-bottom: 8px; }
+    .weak-banner { background: #2a1a1a; border: 1px solid #884444;
+                   border-radius: 8px; padding: 10px 16px; margin-bottom: 12px;
+                   font-size: 0.85rem; color: #faa; }
   </style>
 </head>
 <body>
@@ -62,6 +65,7 @@
 <div id="main" style="display:none">
   <div class="sync-time" id="sync-time"></div>
   <div class="summary" id="summary"></div>
+  <div id="weak-banner" style="display:none" class="weak-banner"></div>
   <div class="filters">
     <button class="filter-btn active" data-subj="all">全部</button>
     <button class="filter-btn" data-subj="math">さんすう</button>
@@ -74,6 +78,7 @@
       <option value="subj">教科順</option>
     </select>
     <label><input type="checkbox" id="chk-seen"> 解いたもののみ表示</label>
+    <button id="btn-csv">📥 CSV ダウンロード</button>
   </div>
   <div class="tbl-wrap">
     <table>
@@ -147,6 +152,7 @@ async function loadFromGist() {
     document.getElementById('sync-time').textContent = `最終同期: ${syncedAt}`;
     setStatus('✅ 読み込み完了', '#6f6');
     renderSummary(data);
+    renderWeakBanner();
     renderTable();
     document.getElementById('main').style.display = '';
   } catch(e) {
@@ -178,6 +184,76 @@ function renderSummary(data) {
     <div class="sum-card"><div class="sum-label">全体正解率</div><div class="sum-value" style="color:${accCol}">${acc}%</div></div>
     <div class="sum-card"><div class="sum-label">レベル</div><div class="sum-value" style="color:#ff8">Lv.${data.level || 1}</div></div>
   `;
+}
+
+function renderWeakBanner() {
+  const banner = document.getElementById('weak-banner');
+  const bySubj = {};
+  for (const q of allData) {
+    if ((q.seen || 0) === 0) continue;
+    const s = q.subj || '?';
+    if (!bySubj[s]) bySubj[s] = { correct: 0, total: 0, wrong: 0 };
+    bySubj[s].correct += (q.correct || 0);
+    bySubj[s].total   += (q.seen || 0);
+    bySubj[s].wrong   += (q.wrong || 0);
+  }
+  const entries = Object.entries(bySubj);
+  if (entries.length === 0) { banner.style.display = 'none'; return; }
+  let worstSubj = null, worstAcc = 999;
+  for (const [s, v] of entries) {
+    const acc = v.total > 0 ? v.correct / v.total * 100 : 100;
+    if (acc < worstAcc) { worstAcc = acc; worstSubj = s; }
+  }
+  const v = bySubj[worstSubj];
+  const accStr = worstAcc.toFixed(0);
+  const label = SUBJ[worstSubj] || worstSubj;
+  banner.textContent = `⚠️ いちばんにがてなのは「${label}」（正解率${accStr}% / ❌まちがい${v.wrong}回ある）`;
+  banner.style.display = '';
+}
+
+function downloadCsv() {
+  const seenOnly = document.getElementById('chk-seen').checked;
+  const sort = document.getElementById('sort-sel').value;
+  let rows = allData.filter(q => filterSubj === 'all' || q.subj === filterSubj);
+  if (seenOnly) rows = rows.filter(q => (q.seen || 0) > 0);
+  rows = [...rows].sort((a, b) => {
+    if (sort === 'wrong') return (b.wrong || 0) - (a.wrong || 0);
+    if (sort === 'acc') {
+      const aA = (a.seen || 0) === 0 ? 999 : (a.correct || 0) / (a.seen || 1);
+      const bA = (b.seen || 0) === 0 ? 999 : (b.correct || 0) / (b.seen || 1);
+      return aA - bA;
+    }
+    if (sort === 'seen') return (b.seen || 0) - (a.seen || 0);
+    if (sort === 'subj') return (a.subj || '').localeCompare(b.subj || '');
+    return 0;
+  });
+  const header = ['教科', '学年', '難易度', '問題文', '正解回数', 'まちがい回数', '正解率(%)'];
+  const csvRows = rows.map(q => {
+    const seen = q.seen || 0;
+    const ok   = q.correct || 0;
+    const ng   = q.wrong   || 0;
+    const acc  = seen > 0 ? (ok / seen * 100).toFixed(1) : '';
+    const esc  = v => '"' + String(v || '').replace(/"/g, '""') + '"';
+    return [
+      esc(SUBJ[q.subj] || q.subj),
+      esc((q.grade || '?') + '年'),
+      esc(DIFF[q.diff] || q.diff || '-'),
+      esc(qLabel(q)),
+      esc(seen > 0 ? ok : ''),
+      esc(seen > 0 ? ng : ''),
+      esc(acc)
+    ].join(',');
+  });
+  const bom = '\uFEFF';
+  const csv = bom + [header.join(','), ...csvRows].join('\r\n');
+  const syncTimeEl = document.getElementById('sync-time').textContent;
+  const dateMatch = syncTimeEl.match(/(\d{4})\/(\d{2})\/(\d{2})/);
+  const datePart = dateMatch ? `${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}` : 'unknown';
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+  a.download = `minecraft-stats-${datePart}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
 }
 
 function qLabel(q) {
@@ -240,6 +316,7 @@ document.querySelectorAll('.filter-btn').forEach(btn => {
 });
 document.getElementById('sort-sel').addEventListener('change', renderTable);
 document.getElementById('chk-seen').addEventListener('change', renderTable);
+document.getElementById('btn-csv').addEventListener('click', downloadCsv);
 
 function setStatus(msg, color) {
   const el = document.getElementById('status');
