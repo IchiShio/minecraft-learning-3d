@@ -1764,6 +1764,25 @@ class Game {
   }
 
   _playerDeath() {
+    // アイテムペナルティ：3個を価値の低い順に没収
+    const ORDER = ['wood','stone','iron','gold','diamond'];
+    const ICONS = { wood:'🪵', stone:'🪨', iron:'⚙️', gold:'✨', diamond:'💎' };
+    let lose = 3;
+    const lost = {};
+    for (const type of ORDER) {
+      if (lose <= 0) break;
+      const have = this.state.inventory[type] || 0;
+      if (have > 0) {
+        const take = Math.min(have, lose);
+        this.state.inventory[type] -= take;
+        lost[type] = take;
+        lose -= take;
+      }
+    }
+    this.saveState();
+    const lostText = Object.entries(lost).map(([t,n]) => `${ICONS[t]}×${n}`).join(' ');
+    const lossEl = document.getElementById('death-item-loss');
+    if (lossEl) lossEl.textContent = lostText ? `アイテム ${lostText} を うしなった…` : '';
     this.gameRunning = false;
     this.player.visible = true;
     this.stopBgm();
