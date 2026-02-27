@@ -3286,6 +3286,7 @@ class Game {
         } else {
           this.collectItem(node);
         }
+        this.checkAchievements();
       }
     }, ok ? 1500 : 1200);
   }
@@ -3435,10 +3436,13 @@ class Game {
       document.getElementById('building-action-popup').classList.add('hidden');
       this.currentBuildingAction = null;
       this.playBgm(this.isNightTime() ? 'night' : 'field');
-      if (ok && act.reward.item) {
-        const itemDef = RESOURCE_DEFS[act.reward.item];
-        const ix = 200, iz = 200;
-        this.spawnFloatingItem(new THREE.Vector3(ix + act.pos[0], 1.5, iz + act.pos[1]), itemDef.icon);
+      if (ok) {
+        if (act.reward.item) {
+          const itemDef = RESOURCE_DEFS[act.reward.item];
+          const ix = 200, iz = 200;
+          this.spawnFloatingItem(new THREE.Vector3(ix + act.pos[0], 1.5, iz + act.pos[1]), itemDef.icon);
+        }
+        this.checkAchievements();
       }
     }, ok ? 1500 : 1200);
   }
@@ -3661,6 +3665,7 @@ class Game {
     this.playerHp = this.playerMaxHp;
     this.invincibleTimer = 0;
     this._updateHpHud();
+    this._updateAchievementHud();
     this.initAudio();
     this.playSe('start');
     setTimeout(() => this.playBgm('field'), 600);
