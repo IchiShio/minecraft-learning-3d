@@ -7,7 +7,7 @@ const SETTINGS_KEY = 'mclearn3d_settings_v1';
 const CUSTOM_Q_KEY  = 'mclearn3d_custom_q_v1';
 const DAILY_LOG_KEY = 'mclearn3d_daily_v1';
 const SYNC_GIST_KEY = 'mclearn3d_gist_v1'; // { id, syncedAt }
-const DEFAULT_SETTINGS = { speed: 1.0, bgmVol: 0.5, seVol: 0.7, difficulty: 'normal', githubToken: '' };
+const DEFAULT_SETTINGS = { speed: 1.0, bgmVol: 0.5, seVol: 0.7, githubToken: '' };
 // レベルから現在の学年を返す (Lv1-2=2年生, Lv3-5=3年生, ...)
 const GRADE_FOR_LEVEL = lv => lv <= 2 ? 2 : lv <= 5 ? 3 : lv <= 9 ? 4 : lv <= 14 ? 5 : 6;
 const QUIZ_PER_SESSION = 5;
@@ -494,9 +494,6 @@ class Game {
       const g = parseInt(grade);
       if (g > maxGrade + 1) return;
       qs.forEach(q => {
-        const diff = this.settings ? this.settings.difficulty : 'normal';
-        if (diff === 'easy' && q.diff === 'hard') return;
-        if (diff === 'normal' && q.diff === 'hard') return;
         const stat = this.playerStats[q.id] || { seen:0, correct:0, wrong:0 };
         // 正解済みの問題はスキップ（定着バリアントプールへ）
         if (stat.correct > 0) { if (g <= maxGrade) solvedPool.push(q); return; }
@@ -514,8 +511,7 @@ class Game {
     const selected = [];
     const pick = (pool, n) => shuf(pool).slice(0, n);
     const bias = this.state ? (this.state.adaptiveBias || 0) : 0;
-    const diff = this.settings ? this.settings.difficulty : 'normal';
-    const maxPreview = (diff === 'easy') ? 0 : Math.max(0, Math.min(bias, 2));
+    const maxPreview = Math.max(0, Math.min(bias, 2));
     const maxReview  = bias < 0 ? 3 : 2;
     selected.push(...pick(reviewPool, Math.min(maxReview, reviewPool.length)));
     selected.push(...pick(normalPool, Math.min(count - selected.length - maxPreview, normalPool.length)));
@@ -678,10 +674,6 @@ class Game {
     // スピードボタン
     document.querySelectorAll('.speed-btn').forEach(btn => {
       btn.classList.toggle('active', parseFloat(btn.dataset.speed) === s.speed);
-    });
-    // 難易度ボタン
-    document.querySelectorAll('.diff-btn').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.diff === (s.difficulty || 'normal'));
     });
     // 音量スライダー
     const bgmSlider = document.getElementById('settings-bgm');
@@ -3658,15 +3650,6 @@ addEventListener('load', () => {
           btn.addEventListener('click', () => {
             game.settings.speed = parseFloat(btn.dataset.speed);
             document.querySelectorAll('.speed-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-          });
-        });
-
-        // 難易度ボタン
-        document.querySelectorAll('.diff-btn').forEach(btn => {
-          btn.addEventListener('click', () => {
-            game.settings.difficulty = btn.dataset.diff;
-            document.querySelectorAll('.diff-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
           });
         });
