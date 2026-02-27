@@ -730,7 +730,7 @@ class Game {
   }
 
   // ===== CLOUD SYNC (GitHub Gist) =====
-  async syncStatsToGitHub() {
+  async syncStatsToGitHub(silent = false) {
     const token = this.settings.githubToken;
     if (!token) return;
     const questions = [];
@@ -766,17 +766,17 @@ class Game {
       const json = await res.json();
       localStorage.setItem(SYNC_GIST_KEY, JSON.stringify({ id: json.id, syncedAt: payload.syncedAt }));
       this._updateSyncStatus();
-      this._showToast('☁️ クラウドに同期しました！');
+      if (!silent) this._showToast('☁️ クラウドに同期しました！');
     } catch(e) {
       console.warn('Gist sync failed:', e);
-      this._showToast('⚠️ 同期に失敗しました');
+      if (!silent) this._showToast('⚠️ 同期に失敗しました');
     }
   }
 
   _scheduleSyncToGitHub() {
     if (!this.settings.githubToken) return;
     if (this._syncTimer) clearTimeout(this._syncTimer);
-    this._syncTimer = setTimeout(() => { this._syncTimer = null; this.syncStatsToGitHub(); }, 5000);
+    this._syncTimer = setTimeout(() => { this._syncTimer = null; this.syncStatsToGitHub(true); }, 5000);
   }
 
   _updateSyncStatus() {
