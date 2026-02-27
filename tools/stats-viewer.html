@@ -91,6 +91,7 @@
           <th data-col="correct">✅ 正解</th>
           <th data-col="wrong">❌ まちがい</th>
           <th data-col="acc">正解率</th>
+          <th>推奨</th>
         </tr>
       </thead>
       <tbody id="tbody"></tbody>
@@ -227,21 +228,25 @@ function downloadCsv() {
     if (sort === 'subj') return (a.subj || '').localeCompare(b.subj || '');
     return 0;
   });
-  const header = ['教科', '学年', '難易度', '問題文', '正解回数', 'まちがい回数', '正解率(%)'];
+  const header = ['ID', '教科', '学年', '難易度', '問題文', '正解回数', 'まちがい回数', '正解率(%)', '推奨'];
   const csvRows = rows.map(q => {
     const seen = q.seen || 0;
     const ok   = q.correct || 0;
     const ng   = q.wrong   || 0;
     const acc  = seen > 0 ? (ok / seen * 100).toFixed(1) : '';
+    const accNum = seen > 0 ? ok / seen * 100 : null;
+    const rec  = seen < 3 ? '' : accNum >= 80 ? 'diffを上げよう' : accNum <= 40 ? 'diffを下げよう' : '';
     const esc  = v => '"' + String(v || '').replace(/"/g, '""') + '"';
     return [
+      esc(q.id || ''),
       esc(SUBJ[q.subj] || q.subj),
       esc((q.grade || '?') + '年'),
       esc(DIFF[q.diff] || q.diff || '-'),
       esc(qLabel(q)),
       esc(seen > 0 ? ok : ''),
       esc(seen > 0 ? ng : ''),
-      esc(acc)
+      esc(acc),
+      esc(rec)
     ].join(',');
   });
   const bom = '\uFEFF';
@@ -294,6 +299,11 @@ function renderTable() {
       ? '<span class="unseen">未回答</span>'
       : `<span class="${accCls}">${acc}%</span>
          <div class="acc-bar"><div class="acc-fill" style="width:${acc}%;background:${fillCol}"></div></div>`;
+    let rec = '<span style="color:#555">─</span>';
+    if (seen >= 3) {
+      if (acc >= 80) rec = '<span style="color:#4f4;font-weight:700" title="diffを1段階上げよう">📈 上げよう</span>';
+      else if (acc <= 40) rec = '<span style="color:#f88;font-weight:700" title="diffを1段階下げよう">📉 下げよう</span>';
+    }
     return `<tr>
       <td><span class="tag">${SUBJ[q.subj] || q.subj}</span></td>
       <td>${q.grade || '?'}年</td>
@@ -302,6 +312,7 @@ function renderTable() {
       <td class="ok">${seen > 0 ? ok + '回' : '-'}</td>
       <td class="ng">${seen > 0 ? ng + '回' : '-'}</td>
       <td>${accHtml}</td>
+      <td>${rec}</td>
     </tr>`;
   }).join('');
 }

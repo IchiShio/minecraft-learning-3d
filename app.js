@@ -398,7 +398,7 @@ class Game {
       if (!data[subj].grades[grade]) data[subj].grades[grade] = [];
       const opts = [r.opt1, r.opt2, r.opt3, r.opt4].filter(Boolean);
       data[subj].grades[grade].push({
-        id: `${subj}_${grade}_csv${idx}`,
+        id: r.id || `${subj}_${grade}_csv${idx}`,
         q: r.question,
         opts,
         correct: parseInt(r.correct) || 0,
