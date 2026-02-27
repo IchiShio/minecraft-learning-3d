@@ -106,6 +106,8 @@ const ACHIEVEMENTS = [
   { id:'diamond_1',      icon:'💎', label:'ダイヤを ゲット！',       cond:(s)   => (s.inventory?.diamond||0) >= 1 },
   { id:'building_1',     icon:'🏠', label:'はじめての たてもの！',  cond:(_,g) => g._unlockedBuildingCount() >= 1 },
   { id:'building_5',     icon:'🏘️', label:'たてもの 5つ かいほう！', cond:(_,g) => g._unlockedBuildingCount() >= 5 },
+  { id:'login_3',        icon:'📅', label:'3日れんぞく ログイン！',  cond:(s)   => (s.loginStreak||0) >= 3 },
+  { id:'login_7',        icon:'🗓️', label:'7日れんぞく ログイン！',  cond:(s)   => (s.loginStreak||0) >= 7 },
 ];
 
 // ===== WORLD EXPANSION ZONES =====
@@ -625,6 +627,60 @@ class Game {
     this._showToast(`⚒️ ${r.icon} ${r.name} をつくった！`);
     this.checkAchievements();
     this.openCraftMenu();
+  }
+
+  // ===== DAILY LOGIN BONUS =====
+  _getDailyBonus(streak) {
+    if (streak % 7 === 0) return { items:{gold:1, stone:2}, xp:30, special:'🎊 7日ごほうびスペシャル！' };
+    if (streak >= 5)      return { items:{iron:1, stone:1}, xp:20 };
+    if (streak >= 3)      return { items:{stone:2},         xp:15 };
+                          return { items:{wood:2},           xp:10 };
+  }
+
+  _checkDailyLogin() {
+    const today = new Date().toISOString().slice(0, 10);
+    if (this.state.lastLoginDate === today) return;
+
+    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    const streak = (this.state.lastLoginDate === yesterday)
+      ? (this.state.loginStreak || 0) + 1
+      : 1;
+    this.state.loginStreak   = streak;
+    this.state.lastLoginDate = today;
+    this.state.totalLoginDays = (this.state.totalLoginDays || 0) + 1;
+    this.saveState();
+
+    const bonus = this._getDailyBonus(streak);
+    const streakEl = document.getElementById('daily-streak');
+    const itemsEl  = document.getElementById('daily-items');
+
+    const streakLabel = (streak > 1 && streak % 7 === 0)
+      ? `🎊 ${streak}日れんぞく！ すごい！`
+      : streak > 1
+        ? `🔥 ${streak}日れんぞく！`
+        : '🌱 きょうも がくしゅうしよう！';
+    streakEl.textContent = streakLabel;
+
+    let html = '';
+    if (bonus.special) html += `<div style="color:#ffd700;margin-bottom:8px">${bonus.special}</div>`;
+    for (const [k, v] of Object.entries(bonus.items)) {
+      html += `<div>${RESOURCE_DEFS[k].icon} ${RESOURCE_DEFS[k].name} ×${v}</div>`;
+    }
+    html += `<div style="margin-top:6px">✨ XP ＋${bonus.xp}</div>`;
+    itemsEl.innerHTML = html;
+
+    document.getElementById('btn-daily-ok').onclick = () => {
+      document.getElementById('daily-bonus').classList.add('hidden');
+      for (const [k, v] of Object.entries(bonus.items)) {
+        this.state.inventory[k] = (this.state.inventory[k] || 0) + v;
+      }
+      this.addXP(bonus.xp);
+      this.updateInventoryHUD();
+      this.saveState();
+      this.checkAchievements();
+    };
+
+    setTimeout(() => document.getElementById('daily-bonus').classList.remove('hidden'), 1200);
   }
 
   selectAdaptiveQuestions(subject, count) {
@@ -3737,6 +3793,7 @@ class Game {
     this.invincibleTimer = 0;
     this._updateHpHud();
     this._updateAchievementHud();
+    this._checkDailyLogin();
     this.initAudio();
     this.playSe('start');
     setTimeout(() => this.playBgm('field'), 600);

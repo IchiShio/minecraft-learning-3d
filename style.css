@@ -333,6 +333,34 @@ html, body {
   touch-action: manipulation;
 }
 
+/* ===== DAILY BONUS ===== */
+#daily-bonus {
+  position: fixed; inset: 0; z-index: 350;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,0.75);
+}
+#daily-bonus.hidden { display: none; }
+.daily-inner {
+  background: linear-gradient(160deg, #1a2a0a, #0a1a2a);
+  border: 2px solid #7cfc00;
+  border-radius: 16px;
+  padding: 24px 20px;
+  max-width: 300px; width: 85%;
+  text-align: center;
+}
+.daily-title { font-size: 1.3rem; color: #ffd700; font-weight: 900; margin-bottom: 8px; }
+.daily-streak { font-size: 1rem; color: #ff9933; font-weight: bold; margin-bottom: 14px; }
+.daily-items { font-size: 0.9rem; color: #ccffcc; margin-bottom: 18px; line-height: 1.9; }
+#btn-daily-ok {
+  background: linear-gradient(180deg, #7cfc00, #4a9a00);
+  border: none; border-radius: 10px;
+  color: #fff; font-size: 1rem; font-family: inherit; font-weight: bold;
+  padding: 10px 30px; cursor: pointer;
+  box-shadow: 0 4px 0 #2a5a00;
+  touch-action: manipulation;
+}
+#btn-daily-ok:active { transform: translateY(2px); box-shadow: 0 2px 0 #2a5a00; }
+
 /* ===== SETTINGS PANEL ===== */
 #settings-panel {
   position: fixed; inset: 0;
