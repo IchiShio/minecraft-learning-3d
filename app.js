@@ -730,7 +730,7 @@ class Game {
   }
 
   // ===== CLOUD SYNC (GitHub Gist) =====
-  async syncStatsToGitHub(silent = false) {
+  async syncStatsToGitHub() {
     const token = this.settings.githubToken;
     if (!token) return;
     const questions = [];
@@ -766,17 +766,15 @@ class Game {
       const json = await res.json();
       localStorage.setItem(SYNC_GIST_KEY, JSON.stringify({ id: json.id, syncedAt: payload.syncedAt }));
       this._updateSyncStatus();
-      if (!silent) this._showToast('☁️ クラウドに同期しました！');
     } catch(e) {
       console.warn('Gist sync failed:', e);
-      if (!silent) this._showToast('⚠️ 同期に失敗しました');
     }
   }
 
   _scheduleSyncToGitHub() {
     if (!this.settings.githubToken) return;
     if (this._syncTimer) clearTimeout(this._syncTimer);
-    this._syncTimer = setTimeout(() => { this._syncTimer = null; this.syncStatsToGitHub(true); }, 5000);
+    this._syncTimer = setTimeout(() => { this._syncTimer = null; this.syncStatsToGitHub(); }, 5000);
   }
 
   _updateSyncStatus() {
@@ -3618,10 +3616,7 @@ addEventListener('load', () => {
         if (game.csvUpdated) {
           setTimeout(() => document.getElementById('update-popup').classList.remove('hidden'), 400);
         }
-        if (game._setupToastPending) {
-          game._setupToastPending = false;
-          setTimeout(() => game._showToast('☁️ クラウド同期の設定が完了しました！\n問題を解くと自動で同期されます'), 800);
-        }
+        game._setupToastPending = false;
 
         document.getElementById('btn-start').addEventListener('click', () => {
           game.resetState();
