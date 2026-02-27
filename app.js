@@ -78,6 +78,26 @@ const RESOURCE_SPAWN = [
   {type:'diamond', pos:[23, 0, 10]},
 ];
 
+// ===== ACHIEVEMENTS =====
+const ACHIEVEMENTS = [
+  { id:'first_correct',  icon:'🌟', label:'はじめての せいかい！',   cond:(s)   => s.totalCorrect >= 1 },
+  { id:'streak_3',       icon:'🔥', label:'3れんぞく せいかい！',    cond:(s)   => (s.maxStreak||0) >= 3 },
+  { id:'streak_5',       icon:'⚡', label:'5れんぞく せいかい！',    cond:(s)   => (s.maxStreak||0) >= 5 },
+  { id:'streak_10',      icon:'💥', label:'10れんぞく せいかい！',   cond:(s)   => (s.maxStreak||0) >= 10 },
+  { id:'total_10',       icon:'📚', label:'10もん といた！',         cond:(s)   => s.totalCorrect >= 10 },
+  { id:'total_50',       icon:'📖', label:'50もん といた！',         cond:(s)   => s.totalCorrect >= 50 },
+  { id:'total_100',      icon:'🏆', label:'100もん といた！',        cond:(s)   => s.totalCorrect >= 100 },
+  { id:'math_10',        icon:'➕', label:'さんすうはかせ！',        cond:(_,g) => g._subjectCorrect('math')     >= 10 },
+  { id:'japanese_10',    icon:'📝', label:'こくごはかせ！',          cond:(_,g) => g._subjectCorrect('japanese') >= 10 },
+  { id:'english_10',     icon:'🔤', label:'えいごはかせ！',          cond:(_,g) => g._subjectCorrect('english')  >= 10 },
+  { id:'level_3',        icon:'⬆️', label:'レベル3たっせい！',       cond:(s)   => s.level >= 3 },
+  { id:'level_5',        icon:'🌙', label:'レベル5たっせい！',       cond:(s)   => s.level >= 5 },
+  { id:'level_10',       icon:'👑', label:'レベル10たっせい！',      cond:(s)   => s.level >= 10 },
+  { id:'diamond_1',      icon:'💎', label:'ダイヤを ゲット！',       cond:(s)   => (s.inventory?.diamond||0) >= 1 },
+  { id:'building_1',     icon:'🏠', label:'はじめての たてもの！',  cond:(_,g) => g._unlockedBuildingCount() >= 1 },
+  { id:'building_5',     icon:'🏘️', label:'たてもの 5つ かいほう！', cond:(_,g) => g._unlockedBuildingCount() >= 5 },
+];
+
 // ===== WORLD EXPANSION ZONES =====
 const WORLD_ZONES = [
   { id:'zone2', name:'むらのはずれ',     bound:33, fog:0.012,
@@ -482,6 +502,60 @@ class Game {
     ].join(';');
     document.body.appendChild(div);
     setTimeout(() => div.remove(), 3000);
+  }
+
+  // ===== ACHIEVEMENTS =====
+  _subjectCorrect(subj) {
+    const grades = this.quizData?.[subj]?.grades || {};
+    return Object.values(grades).flat().reduce((sum, q) => sum + (this.playerStats[q.id]?.correct || 0), 0);
+  }
+
+  _unlockedBuildingCount() {
+    return BUILDING_DEFS.filter(b => b.cond(this.state)).length;
+  }
+
+  checkAchievements() {
+    if (!this.state.achievements) this.state.achievements = [];
+    const unlocked = this.state.achievements;
+    const newOnes = [];
+    for (const a of ACHIEVEMENTS) {
+      if (unlocked.includes(a.id)) continue;
+      if (a.cond(this.state, this)) {
+        unlocked.push(a.id);
+        newOnes.push(a);
+      }
+    }
+    if (newOnes.length) {
+      this.saveState();
+      this._updateAchievementHud();
+      newOnes.forEach((a, i) => {
+        setTimeout(() => this._showAchievementToast(a), i * 1200);
+      });
+    }
+  }
+
+  _showAchievementToast(a) {
+    const div = document.createElement('div');
+    div.innerHTML = `🏅 じっせき かいほう！<br><strong>${a.icon} ${a.label}</strong>`;
+    div.style.cssText = [
+      'position:fixed', 'top:64px', 'left:50%', 'transform:translateX(-50%)',
+      'background:linear-gradient(135deg,#7a5500,#c8900a)',
+      'border:2px solid #ffd700', 'border-radius:12px',
+      'padding:12px 24px', 'font-size:0.95rem', 'color:#fff',
+      'z-index:9999', 'text-align:center', 'white-space:pre-line',
+      'box-shadow:0 0 20px #ffd70066', 'pointer-events:none',
+      'font-family:inherit', 'font-weight:700', 'line-height:1.6',
+    ].join(';');
+    document.body.appendChild(div);
+    setTimeout(() => { div.style.transition = 'opacity 0.5s'; div.style.opacity = '0'; }, 2500);
+    setTimeout(() => div.remove(), 3100);
+  }
+
+  _updateAchievementHud() {
+    const el = document.getElementById('hud-achievements');
+    if (!el) return;
+    const count = (this.state.achievements || []).length;
+    el.textContent = `🏅 ${count} / ${ACHIEVEMENTS.length}`;
   }
 
   selectAdaptiveQuestions(subject, count) {

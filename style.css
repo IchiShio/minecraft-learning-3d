@@ -216,6 +216,13 @@ html, body {
   padding: 4px 10px;
   border-radius: 6px;
 }
+.hud-achievements {
+  background: rgba(0,0,0,0.6);
+  color: #ffd700;
+  font-size: 0.75rem;
+  padding: 4px 10px;
+  border-radius: 6px;
+}
 .hud-day {
   background: rgba(0,0,0,0.6);
   color: #ffffbb;
