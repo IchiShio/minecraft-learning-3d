@@ -1752,6 +1752,8 @@ class Game {
   // ===== HP / ダメージ =====
   hurtPlayer(dmg) {
     if (this.invincibleTimer > 0 || !this.gameRunning) return;
+    if (!document.getElementById('mining-popup').classList.contains('hidden')) return;
+    if (!document.getElementById('building-action-popup').classList.contains('hidden')) return;
     this.playerHp = Math.max(0, this.playerHp - dmg);
     this.invincibleTimer = 80;
     this._updateHpHud();
