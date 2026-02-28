@@ -126,6 +126,7 @@ const ACHIEVEMENTS = [
   { id:'quest_10',       icon:'🗺️', label:'クエスト 10かい クリア！', cond:(s)   => (s.totalQuestsCompleted||0) >= 10 },
   { id:'mob_1',          icon:'⚔️', label:'はじめての てきを たおした！', cond:(s) => (s.totalMobKills||0) >= 1 },
   { id:'mob_10',         icon:'🗡️', label:'てきを 10たい たおした！',    cond:(s) => (s.totalMobKills||0) >= 10 },
+  { id:'trade_1',        icon:'🤝', label:'はじめての こうかん！',        cond:(s) => (s.totalTrades||0) >= 1 },
 ];
 
 // ===== WORLD EXPANSION ZONES =====
@@ -228,6 +229,31 @@ const INITIAL_MOBS = [
   {type:'chicken', x:4,   z:14}, {type:'chicken', x:-5, z:-13},
 ];
 
+// ===== VILLAGER DEFINITIONS =====
+const VILLAGER_DEFS = [
+  { id:'vil_shop',  name:'アイテム屋さん', icon:'🛒', x:  4, z:-16,
+    skin:'#F5D5B0', shirt:'#3366CC', pants:'#224499', hatCol:'#CC3322',
+    trades:[
+      { icon:'🪵', label:'木×3 → XP20',       needs:{wood:3},    reward:{xp:20}     },
+      { icon:'🪨', label:'石×3 → HP かいふく', needs:{stone:3},   reward:{hp:1}      },
+      { icon:'⚙️', label:'鉄×2 → XP40',       needs:{iron:2},    reward:{xp:40}     },
+    ]},
+  { id:'vil_armor', name:'ぼうぐ屋さん',   icon:'🛡️', x:-13, z: -7,
+    skin:'#D4A070', shirt:'#884422', pants:'#663311', hatCol:'#442200',
+    trades:[
+      { icon:'✨', label:'金×3 → ダイヤ1こ',  needs:{gold:3},    reward:{diamond:1}  },
+      { icon:'⚙️', label:'鉄×3 → HP ぜんかい', needs:{iron:3},   reward:{hpFull:1}   },
+      { icon:'💎', label:'ダイヤ×1 → XP80',  needs:{diamond:1}, reward:{xp:80}      },
+    ]},
+  { id:'vil_mage',  name:'まほう使い',     icon:'🧙', x: 17, z: 12,
+    skin:'#C8A0CC', shirt:'#6633AA', pants:'#4422AA', hatCol:'#221144',
+    trades:[
+      { icon:'🪵🪨', label:'木×2＋石×2 → XP30',    needs:{wood:2, stone:2}, reward:{xp:30}   },
+      { icon:'⚙️✨', label:'鉄×1＋金×1 → ダイヤ1', needs:{iron:1, gold:1},  reward:{diamond:1} },
+      { icon:'💎',   label:'ダイヤ×2 → XP150',      needs:{diamond:2},       reward:{xp:150}  },
+    ]},
+];
+
 function hexDarken(hex, f) {
   hex = hex.replace('#','');
   if (hex.length===3) hex=hex.split('').map(c=>c+c).join('');
@@ -307,6 +333,8 @@ class Game {
     this.nearResource = null;
     this.nearBuilding = null;
     this.nearTreasure = null;
+    this.nearVillager = null;
+    this.villagers = [];
     this.mining = null;
     this.gameRunning = false;
     this.frame = 0;
@@ -654,6 +682,54 @@ class Game {
     this._showToast(`⚒️ ${r.icon} ${r.name} をつくった！`);
     this.checkAchievements();
     this.openCraftMenu();
+  }
+
+  // ===== VILLAGER TRADING =====
+  openTradeMenu(def) {
+    document.getElementById('trade-villager-name').textContent = `${def.icon} ${def.name}`;
+    const list = document.getElementById('trade-list');
+    list.innerHTML = '';
+    const inv = this.state.inventory || {};
+    for (const trade of def.trades) {
+      const canAfford = Object.entries(trade.needs).every(([k, v]) => (inv[k] || 0) >= v);
+      const needsHtml = Object.entries(trade.needs).map(([k, v]) => {
+        const have = inv[k] || 0;
+        return `<span style="color:${have>=v?'#7cf07c':'#f88'}">${RESOURCE_DEFS[k].icon}×${v}(${have})</span>`;
+      }).join(' ');
+      const div = document.createElement('div');
+      div.className = 'craft-item';
+      div.innerHTML = `
+        <span class="craft-item-icon">${trade.icon}</span>
+        <div class="craft-item-info">
+          <div class="craft-item-name">${trade.label}</div>
+          <div class="craft-item-needs">${needsHtml}</div>
+        </div>
+        <button class="btn-do-craft" ${!canAfford ? 'disabled' : ''} data-id="${def.trades.indexOf(trade)}">こうかん</button>
+      `;
+      list.appendChild(div);
+    }
+    list.querySelectorAll('.btn-do-craft:not(:disabled)').forEach(btn => {
+      btn.onclick = () => this.doTrade(def, def.trades[parseInt(btn.dataset.id)]);
+    });
+    document.getElementById('trade-menu').classList.remove('hidden');
+  }
+
+  doTrade(def, trade) {
+    const inv = this.state.inventory;
+    if (!Object.entries(trade.needs).every(([k, v]) => (inv[k] || 0) >= v)) return;
+    for (const [k, v] of Object.entries(trade.needs)) inv[k] = (inv[k] || 0) - v;
+    let msg = `🤝 ${def.name}と こうかんした！`;
+    if (trade.reward.xp)     { this.addXP(trade.reward.xp); msg += ` ＋${trade.reward.xp}XP`; }
+    if (trade.reward.hp)     { this.playerHp = Math.min(this.playerMaxHp, this.playerHp + trade.reward.hp); this._updateHpHud(); }
+    if (trade.reward.hpFull) { this.playerHp = this.playerMaxHp; this._updateHpHud(); }
+    if (trade.reward.diamond){ inv.diamond = (inv.diamond || 0) + trade.reward.diamond; }
+    this.state.totalTrades = (this.state.totalTrades || 0) + 1;
+    this.updateInventoryHUD();
+    this.saveState();
+    this.playSe('unlock');
+    this._showToast(msg);
+    this.checkAchievements();
+    this.openTradeMenu(def);
   }
 
   // ===== DAILY LOGIN BONUS =====
@@ -1344,6 +1420,7 @@ class Game {
     this.buildBuildings();
     this.buildResourceNodes();
     this.buildTreasureChests();
+    this.buildVillagers();
     this.spawnMobs();
     this.setupControls();
     this.loop();
@@ -1820,6 +1897,55 @@ class Game {
     }
     g.position.set(spawnX, 0, spawnZ);
     g.userData = { type, def, state:'wander', wanderTimer:0, wanderDx:0, wanderDz:0, fireCooldown:9999, legL, legR, hp: MOB_COMBAT[type]?.hp ?? 999 };
+    return g;
+  }
+
+  // ===== VILLAGERS =====
+  buildVillagers() {
+    this.villagers.forEach(v => this.scene.remove(v.mesh));
+    this.villagers = [];
+    VILLAGER_DEFS.forEach(def => {
+      const mesh = this.buildVillagerMesh(def);
+      this.scene.add(mesh);
+      this.villagers.push({ mesh, def });
+    });
+  }
+
+  buildVillagerMesh(def) {
+    const mkMat = hex => new THREE.MeshLambertMaterial({ color: new THREE.Color(hex) });
+    const g = new THREE.Group();
+    const hs = 0.44, bh = 0.55, lh = 0.44;
+    // head
+    const head = new THREE.Mesh(new THREE.BoxGeometry(hs, hs, hs), mkMat(def.skin));
+    head.position.y = lh + bh + hs / 2 + 0.05;
+    g.add(head);
+    // hat
+    const brim = new THREE.Mesh(new THREE.BoxGeometry(hs + 0.16, 0.06, hs + 0.16), mkMat(def.hatCol));
+    brim.position.y = lh + bh + hs + 0.08 + 0.03;
+    g.add(brim);
+    const hatTop = new THREE.Mesh(new THREE.BoxGeometry(hs + 0.02, 0.22, hs + 0.02), mkMat(def.hatCol));
+    hatTop.position.y = lh + bh + hs + 0.08 + 0.06 + 0.11;
+    g.add(hatTop);
+    // body
+    const body = new THREE.Mesh(new THREE.BoxGeometry(hs * 1.1, bh, hs * 0.55), mkMat(def.shirt));
+    body.position.y = lh + bh / 2;
+    g.add(body);
+    // legs
+    const legL = new THREE.Mesh(new THREE.BoxGeometry(hs * 0.42, lh, hs * 0.42), mkMat(def.pants));
+    legL.position.set(-hs * 0.24, lh / 2, 0);
+    g.add(legL);
+    const legR = new THREE.Mesh(new THREE.BoxGeometry(hs * 0.42, lh, hs * 0.42), mkMat(def.pants));
+    legR.position.set(hs * 0.24, lh / 2, 0);
+    g.add(legR);
+    // arms
+    const armL = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.46, 0.17), mkMat(def.shirt));
+    armL.position.set(-hs * 0.76, lh + bh * 0.5, 0);
+    g.add(armL);
+    const armR = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.46, 0.17), mkMat(def.shirt));
+    armR.position.set(hs * 0.76, lh + bh * 0.5, 0);
+    g.add(armR);
+    g.position.set(def.x, 0, def.z);
+    g.userData = { type: 'villager', def, legL, legR, phase: Math.random() * Math.PI * 2 };
     return g;
   }
 
@@ -2451,11 +2577,11 @@ class Game {
     this.state.inventory[item] = (this.state.inventory[item] || 0) + 1;
     this.spawnFloatingItem(mob.position.clone(), icon);
     this.addXP(cbt.xp);
-    this.showToast(`💀 ${cbt.name}を たおした！\n＋${cbt.xp}XP`, 1800);
+    this._showToast(`💀 ${cbt.name}を たおした！ ＋${cbt.xp}XP`);
     this.state.totalMobKills = (this.state.totalMobKills || 0) + 1;
     this.checkAchievements();
     this.saveState();
-    this._updateInventoryHud();
+    this.updateInventoryHUD();
   }
 
   _updateAttackBtn() {
@@ -2499,6 +2625,17 @@ class Game {
     // Attack cooldown
     if (this.playerAttackCd > 0) this.playerAttackCd--;
     if (this.frame % 5 === 0) this._updateAttackBtn();
+    // Villager idle bob & facing player
+    this.villagers.forEach(v => {
+      const ud = v.mesh.userData;
+      v.mesh.position.y = Math.sin(this.frame * 0.025 + ud.phase) * 0.05;
+      const dx = this.player.position.x - v.mesh.position.x;
+      const dz = this.player.position.z - v.mesh.position.z;
+      if (Math.hypot(dx, dz) < 10) v.mesh.rotation.y = Math.atan2(dx, dz);
+      const legSwing = Math.sin(this.frame * 0.06 + ud.phase) * 0.18;
+      if (ud.legL) ud.legL.rotation.x =  legSwing;
+      if (ud.legR) ud.legR.rotation.x = -legSwing;
+    });
     // Animate building action indicator
     if (this.actionIndicatorMesh) {
       this.actionIndicatorMesh.position.y = 1.5 + Math.sin(this.frame * 0.06) * 0.18;
@@ -2678,6 +2815,13 @@ class Game {
       if (d < ntd) { ntd = d; nt = chest; }
     });
 
+    // Find nearest villager
+    let nv = null, nvd = 2.8;
+    this.villagers.forEach(v => {
+      const d = Math.hypot(px - v.mesh.position.x, pz - v.mesh.position.z);
+      if (d < nvd) { nvd = d; nv = v; }
+    });
+
     // Find nearest building
     let nb = null, nbd = 5;
     BUILDING_DEFS.forEach(b => {
@@ -2687,8 +2831,10 @@ class Game {
 
     if (nr && nr !== this.nearResource) this.playSe('portal');
     if (nt && nt !== this.nearTreasure) this.playSe('portal');
+    if (nv && nv !== this.nearVillager) this.playSe('portal');
     this.nearResource = nr;
     this.nearTreasure = nt;
+    this.nearVillager = nv;
     this.nearBuilding = nb;
 
     const hint = document.getElementById('interact-hint');
@@ -2702,6 +2848,11 @@ class Game {
       popup.classList.add('hidden');
     } else if (nt) {
       hint.textContent = `📦 宝箱を あける：E / タップ！`;
+      hint.classList.remove('hidden');
+      btnI.classList.remove('hidden');
+      popup.classList.add('hidden');
+    } else if (nv) {
+      hint.textContent = `${nv.def.icon} ${nv.def.name}：E / タップ でこうかん！`;
       hint.classList.remove('hidden');
       btnI.classList.remove('hidden');
       popup.classList.add('hidden');
@@ -2775,6 +2926,8 @@ class Game {
       this.startMining(this.nearResource);
     } else if (this.nearTreasure && !this.mining) {
       this.startTreasureQuiz(this.nearTreasure);
+    } else if (this.nearVillager) {
+      this.openTradeMenu(this.nearVillager.def);
     } else if (this.nearBuilding && this.nearBuilding.cond(this.state)) {
       this.enterBuilding(this.nearBuilding);
     }
@@ -4077,6 +4230,11 @@ addEventListener('load', () => {
         const btnAtk = document.getElementById('btn-attack');
         btnAtk.addEventListener('click', () => game.tryAttack());
         btnAtk.addEventListener('touchend', e => { e.preventDefault(); game.tryAttack(); });
+
+        // 交易メニュー
+        document.getElementById('btn-trade-close').addEventListener('click', () => {
+          document.getElementById('trade-menu').classList.add('hidden');
+        });
 
         // 建物から出るボタン
         document.getElementById('btn-exit-building').addEventListener('click', () => {
