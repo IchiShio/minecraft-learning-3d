@@ -3634,6 +3634,9 @@ class Game {
   _renderMiningOptions(q) {
     const optsEl = document.getElementById('mining-options');
     optsEl.innerHTML = '';
+    // 前回の手書きパッド状態をリセット
+    optsEl.parentElement.classList.remove('has-handwrite');
+    this._handwriteShowAnswer = null;
     if (q.type === 'write') {
       this._createHandwritePad(optsEl, q);
     } else {
@@ -3648,9 +3651,12 @@ class Game {
   }
 
   _createHandwritePad(container, q) {
-    const SIZE = 280;
+    const SIZE = 420;
     const wrap = document.createElement('div');
     wrap.className = 'handwrite-wrap';
+
+    // モーダルを手書きモード用に拡張
+    container.parentElement.classList.add('has-handwrite');
 
     const canvas = document.createElement('canvas');
     canvas.width = SIZE;
@@ -3663,22 +3669,26 @@ class Game {
     strokeCanvas.height = SIZE;
     const sc = strokeCanvas.getContext('2d');
     sc.strokeStyle = '#e8ffe8';
-    sc.lineWidth = 18;
+    sc.lineWidth = 22;
     sc.lineCap = 'round';
     sc.lineJoin = 'round';
 
-    const drawGuide = () => {
+    const redraw = () => {
       ctx.clearRect(0, 0, SIZE, SIZE);
+      ctx.drawImage(strokeCanvas, 0, 0);
+    };
+    redraw();
+
+    // 不正解時に正解の漢字を薄く表示する関数（answerMiningから呼ばれる）
+    this._handwriteShowAnswer = (kanji) => {
       ctx.save();
       ctx.font = `bold ${Math.floor(SIZE * 0.70)}px serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillStyle = 'rgba(100,200,100,0.12)';
-      ctx.fillText(q.opts[0], SIZE / 2, SIZE / 2);
+      ctx.fillStyle = 'rgba(100,220,100,0.25)';
+      ctx.fillText(kanji, SIZE / 2, SIZE / 2);
       ctx.restore();
-      ctx.drawImage(strokeCanvas, 0, 0);
     };
-    drawGuide();
 
     let drawing = false;
     let hasStrokes = false;
@@ -3707,7 +3717,7 @@ class Game {
       sc.stroke();
       sc.beginPath();
       sc.moveTo(p.x, p.y);
-      drawGuide();
+      redraw();
     };
     const endDraw = e => {
       e.preventDefault();
@@ -3731,8 +3741,8 @@ class Game {
     clearBtn.textContent = '🗑 けす';
     clearBtn.onclick = () => {
       sc.clearRect(0, 0, SIZE, SIZE);
+      ctx.clearRect(0, 0, SIZE, SIZE);
       hasStrokes = false;
-      drawGuide();
     };
 
     const submitBtn = document.createElement('button');
@@ -3856,6 +3866,8 @@ class Game {
       const correctLabel = q.opts[q.correct];
       fb.textContent = `❌ ちがう！ 正解: ${correctLabel}。${q.explain || ''}`;
       fb.className = 'mining-feedback wrong';
+      // 手書き問題の場合、キャンバスに正解を薄く表示
+      if (q.type === 'write' && this._handwriteShowAnswer) this._handwriteShowAnswer(correctLabel);
     }
     fb.classList.remove('hidden');
     this.state.totalGames++;

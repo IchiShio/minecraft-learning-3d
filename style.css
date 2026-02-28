@@ -1043,12 +1043,18 @@ html, body {
 .mining-feedback.wrong   { background: rgba(200,0,0,0.2); color: #ff8888; }
 
 /* ===== HANDWRITE PAD (手書き) ===== */
+#mining-modal.has-handwrite {
+  max-width: 95vw;
+  width: 95vw;
+  padding: 12px 8px;
+}
 .handwrite-wrap {
   display: flex; flex-direction: column;
   align-items: center; gap: 10px; padding: 2px 0;
 }
 .handwrite-canvas {
-  width: 240px; height: 240px;
+  width: min(80vw, 75vh);
+  height: min(80vw, 75vh);
   border: 3px solid #4a8a20; border-radius: 12px;
   background: #1a2a1a;
   touch-action: none; cursor: crosshair; display: block;
