@@ -3695,7 +3695,8 @@ class Game {
 
     const getPos = e => {
       const rect = canvas.getBoundingClientRect();
-      const src = e.touches ? e.touches[0] : e;
+      // changedTouches を優先（touchstart/touchmove/touchend で確実に現在の指の位置を取得）
+      const src = (e.changedTouches && e.changedTouches[0]) ? e.changedTouches[0] : e;
       return {
         x: (src.clientX - rect.left) * (SIZE / rect.width),
         y: (src.clientY - rect.top) * (SIZE / rect.height)
@@ -3703,6 +3704,7 @@ class Game {
     };
     const startDraw = e => {
       e.preventDefault();
+      e.stopPropagation();
       const p = getPos(e);
       sc.beginPath();
       sc.moveTo(p.x, p.y);
@@ -3711,6 +3713,7 @@ class Game {
     };
     const moveDraw = e => {
       e.preventDefault();
+      e.stopPropagation();
       if (!drawing) return;
       const p = getPos(e);
       sc.lineTo(p.x, p.y);
@@ -3728,6 +3731,7 @@ class Game {
     canvas.addEventListener('touchstart', startDraw, { passive: false });
     canvas.addEventListener('touchmove', moveDraw, { passive: false });
     canvas.addEventListener('touchend', endDraw, { passive: false });
+    canvas.addEventListener('touchcancel', endDraw, { passive: false });
     canvas.addEventListener('mousedown', startDraw);
     canvas.addEventListener('mousemove', moveDraw);
     canvas.addEventListener('mouseup', endDraw);
@@ -3749,7 +3753,11 @@ class Game {
     submitBtn.className = 'write-submit-btn';
     submitBtn.textContent = '✓ こたえる';
     submitBtn.onclick = () => {
-      if (!hasStrokes) return;
+      if (!hasStrokes) {
+        submitBtn.textContent = '✏️ まず かいてね！';
+        setTimeout(() => { submitBtn.textContent = '✓ こたえる'; }, 1200);
+        return;
+      }
       submitBtn.disabled = true;
       clearBtn.disabled = true;
       const ok = this._evaluateHandwriting(strokeCanvas, q.opts[0], SIZE);
