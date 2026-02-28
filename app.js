@@ -88,6 +88,20 @@ const CRAFT_RECIPES = [
   { id:'armor_dia',  icon:'💎', name:'ダイヤのよろい', needs:{diamond:2},        reward:{maxHp:2}, once:true,  desc:'さいだいHP ＋2（1かいのみ）' },
 ];
 
+// ===== DAILY QUESTS =====
+const QUEST_POOL = [
+  { id:'q_correct3',  icon:'⭐', label:'きょう 3もん せいかいしよう！',  check:(g) => g.todayCorrect >= 3,               reward:{xp:15} },
+  { id:'q_correct5',  icon:'🌟', label:'きょう 5もん せいかいしよう！',  check:(g) => g.todayCorrect >= 5,               reward:{xp:25} },
+  { id:'q_correct10', icon:'💫', label:'きょう 10もん せいかいしよう！', check:(g) => g.todayCorrect >= 10,              reward:{xp:40} },
+  { id:'q_math3',     icon:'➕', label:'さんすうを 3もん といて！',      check:(g) => (g.todayLog.math?.c||0) >= 3,      reward:{xp:20} },
+  { id:'q_jpn3',      icon:'📝', label:'こくごを 3もん といて！',        check:(g) => (g.todayLog.japanese?.c||0) >= 3,  reward:{xp:20} },
+  { id:'q_eng3',      icon:'🔤', label:'えいごを 3もん といて！',        check:(g) => (g.todayLog.english?.c||0) >= 3,   reward:{xp:20} },
+  { id:'q_wood2',     icon:'🪵', label:'もくざいを 2こ あつめて！',      check:(g) => (g.state.inventory.wood||0) >= 2,  reward:{xp:15} },
+  { id:'q_stone2',    icon:'🪨', label:'いしを 2こ あつめて！',          check:(g) => (g.state.inventory.stone||0) >= 2, reward:{xp:15} },
+  { id:'q_streak3',   icon:'🔥', label:'3れんぞく せいかいしよう！',     check:(g) => (g.state.currentStreak||0) >= 3,   reward:{xp:20} },
+  { id:'q_building1', icon:'🏠', label:'たてものに はいって！',           check:(g) => g._unlockedBuildingCount() >= 1,   reward:{xp:10} },
+];
+
 // ===== ACHIEVEMENTS =====
 const ACHIEVEMENTS = [
   { id:'first_correct',  icon:'🌟', label:'はじめての せいかい！',   cond:(s)   => s.totalCorrect >= 1 },
@@ -106,8 +120,10 @@ const ACHIEVEMENTS = [
   { id:'diamond_1',      icon:'💎', label:'ダイヤを ゲット！',       cond:(s)   => (s.inventory?.diamond||0) >= 1 },
   { id:'building_1',     icon:'🏠', label:'はじめての たてもの！',  cond:(_,g) => g._unlockedBuildingCount() >= 1 },
   { id:'building_5',     icon:'🏘️', label:'たてもの 5つ かいほう！', cond:(_,g) => g._unlockedBuildingCount() >= 5 },
-  { id:'login_3',        icon:'📅', label:'3日れんぞく ログイン！',  cond:(s)   => (s.loginStreak||0) >= 3 },
-  { id:'login_7',        icon:'🗓️', label:'7日れんぞく ログイン！',  cond:(s)   => (s.loginStreak||0) >= 7 },
+  { id:'login_3',        icon:'📅', label:'3日れんぞく ログイン！',   cond:(s)   => (s.loginStreak||0) >= 3 },
+  { id:'login_7',        icon:'🗓️', label:'7日れんぞく ログイン！',   cond:(s)   => (s.loginStreak||0) >= 7 },
+  { id:'quest_3',        icon:'📋', label:'クエスト 3かい クリア！',  cond:(s)   => (s.totalQuestsCompleted||0) >= 3 },
+  { id:'quest_10',       icon:'🗺️', label:'クエスト 10かい クリア！', cond:(s)   => (s.totalQuestsCompleted||0) >= 10 },
 ];
 
 // ===== WORLD EXPANSION ZONES =====
@@ -681,6 +697,73 @@ class Game {
     };
 
     setTimeout(() => document.getElementById('daily-bonus').classList.remove('hidden'), 1200);
+  }
+
+  // ===== DAILY QUESTS =====
+  _initDailyQuests() {
+    const today = new Date().toISOString().slice(0, 10);
+    if (this.state.questDate === today) return;
+    const shuffled = [...QUEST_POOL].sort(() => Math.random() - 0.5);
+    this.state.questDate        = today;
+    this.state.activeQuestIds   = shuffled.slice(0, 3).map(q => q.id);
+    this.state.completedQuestIds = [];
+    this.saveState();
+  }
+
+  checkQuests() {
+    if (!this.state.activeQuestIds) return;
+    const completed = this.state.completedQuestIds || [];
+    let anyNew = false;
+    for (const id of this.state.activeQuestIds) {
+      if (completed.includes(id)) continue;
+      const quest = QUEST_POOL.find(q => q.id === id);
+      if (!quest || !quest.check(this)) continue;
+      completed.push(id);
+      anyNew = true;
+      this.state.totalQuestsCompleted = (this.state.totalQuestsCompleted || 0) + 1;
+      if (quest.reward.xp)   this.addXP(quest.reward.xp);
+      if (quest.reward.item) {
+        const k = quest.reward.item;
+        this.state.inventory[k] = (this.state.inventory[k] || 0) + 1;
+        this.updateInventoryHUD();
+      }
+      this._showToast(`📋 クエスト かんりょう！\n${quest.icon} ${quest.label}`);
+    }
+    if (anyNew) {
+      this.state.completedQuestIds = completed;
+      this.saveState();
+      this._updateQuestBtn();
+      this.checkAchievements();
+    }
+  }
+
+  openQuestPanel() {
+    const list = document.getElementById('quest-list');
+    list.innerHTML = '';
+    const active    = this.state.activeQuestIds   || [];
+    const completed = this.state.completedQuestIds || [];
+    for (const id of active) {
+      const quest = QUEST_POOL.find(q => q.id === id);
+      if (!quest) continue;
+      const done = completed.includes(id);
+      const div = document.createElement('div');
+      div.className = 'quest-item' + (done ? ' quest-done' : '');
+      div.innerHTML = `
+        <span class="quest-icon">${done ? '✅' : quest.icon}</span>
+        <div class="quest-label">${quest.label}</div>
+        <span class="quest-reward">${done ? 'クリア！' : `XP＋${quest.reward.xp}`}</span>
+      `;
+      list.appendChild(div);
+    }
+    document.getElementById('quest-panel').classList.remove('hidden');
+  }
+
+  _updateQuestBtn() {
+    const el = document.getElementById('btn-quest');
+    if (!el) return;
+    const done  = (this.state.completedQuestIds || []).length;
+    const total = (this.state.activeQuestIds    || []).length || 3;
+    el.textContent = `📋 ${done}/${total}`;
   }
 
   selectAdaptiveQuestions(subject, count) {
@@ -3411,6 +3494,7 @@ class Game {
         } else {
           this.collectItem(node);
         }
+        this.checkQuests();
         this.checkAchievements();
       }
     }, ok ? 1500 : 1200);
@@ -3567,6 +3651,7 @@ class Game {
           const ix = 200, iz = 200;
           this.spawnFloatingItem(new THREE.Vector3(ix + act.pos[0], 1.5, iz + act.pos[1]), itemDef.icon);
         }
+        this.checkQuests();
         this.checkAchievements();
       }
     }, ok ? 1500 : 1200);
@@ -3753,6 +3838,7 @@ class Game {
     document.getElementById('btn-home').classList.add('hidden');
     document.getElementById('btn-settings').classList.add('hidden');
     document.getElementById('btn-craft').classList.add('hidden');
+    document.getElementById('btn-quest').classList.add('hidden');
     document.getElementById('mobile-controls').classList.add('hidden');
     document.getElementById('interact-hint').classList.add('hidden');
     document.getElementById('building-popup').classList.add('hidden');
@@ -3779,6 +3865,7 @@ class Game {
     document.getElementById('btn-home').classList.remove('hidden');
     document.getElementById('btn-settings').classList.remove('hidden');
     document.getElementById('btn-craft').classList.remove('hidden');
+    document.getElementById('btn-quest').classList.remove('hidden');
     if (this.isMobile) document.getElementById('mobile-controls').classList.remove('hidden');
     // モブ・昼夜リセット
     this.spawnMobs();
@@ -3794,6 +3881,8 @@ class Game {
     this._updateHpHud();
     this._updateAchievementHud();
     this._checkDailyLogin();
+    this._initDailyQuests();
+    this._updateQuestBtn();
     this.initAudio();
     this.playSe('start');
     setTimeout(() => this.playBgm('field'), 600);
@@ -3899,6 +3988,12 @@ addEventListener('load', () => {
         document.getElementById('btn-craft').addEventListener('click', () => game.openCraftMenu());
         document.getElementById('btn-craft-close').addEventListener('click', () => {
           document.getElementById('craft-menu').classList.add('hidden');
+        });
+
+        // クエストパネル
+        document.getElementById('btn-quest').addEventListener('click', () => game.openQuestPanel());
+        document.getElementById('btn-quest-close').addEventListener('click', () => {
+          document.getElementById('quest-panel').classList.add('hidden');
         });
 
         // 建物から出るボタン
