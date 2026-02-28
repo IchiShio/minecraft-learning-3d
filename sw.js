@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mclearn3d-v26';
+const CACHE_NAME = 'mclearn3d-v27';
 const STATIC_ASSETS = [
   './',
   './index.html',
