@@ -9,6 +9,38 @@ Three.js製の3Dマイクラ風学習ゲーム。小学生（主に2年生〜6�
 - レベルアップで対応学年が上がる（Lv1-2=2年生, Lv3-5=3年生, ...）
 - `GRADE_FOR_LEVEL` 関数で現在の学年を管理
 
+## 実装済み機能一覧（2026-02-28時点）
+
+| カテゴリ | 機能 | 詳細 |
+|----------|------|------|
+| コア | リソース採掘 | 33ブロック（木/石/鉄/金/ダイヤ）、正解でアイテムGET |
+| コア | 宝箱クイズ | 6箇所、正解でランダムアイテム、180秒リスポーン |
+| コア | 建物17棟 | 解放条件付き、専用インテリア付き |
+| コア | ワールド拡張 | 5ゾーン（bounds 28→70）、アイテム/Lvで順次解放 |
+| 学習 | CSV問題読み込み | questions.csv を自動反映（79問: math/japanese/english） |
+| 学習 | 書き取り問題 | type:'write' でテキスト入力式問題（漢字15問追加済み） |
+| 学習 | 適応難易度 | 正解率で adaptiveBias (-2〜+2) が自動調整 |
+| 学習 | リテンション出題 | 解済み問題をシャッフル/バリアントで再出題 |
+| RPG | HP/ダメージ | ハート6個、赤フラッシュ、無敵時間、温泉で全回復 |
+| RPG | XP/レベル | 正解12XP、コンボボーナス、レベルアップで学年UP |
+| RPG | 実績バッジ | 25種（`ACHIEVEMENTS` 配列）、解放時トースト通知 |
+| RPG | クラフト | 6レシピ（⚒️ボタン）、アイテム消費→報酬 |
+| RPG | デイリークエスト | 毎日3クエスト（プール10種）、リセット条件あり |
+| RPG | ログインボーナス | 毎日初起動時にアイテム＋ストリーク表示 |
+| モブ | 敵AI | zombie/skeleton/creeper/ghast（夜スポーン） |
+| モブ | 受動モブ | pig/sheep/chicken（昼スポーン、接近で逃走） |
+| モブ | プレイヤー攻撃 | Spaceキー/⚔️ボタン、近距離の敵を倒してXP/アイテム |
+| NPC | 村人交易 | 3NPC（アイテム屋/ぼうぐ屋/まほう使い）、アイテム交換 |
+| 操作 | Dパッド+タップ移動 | モバイル対応、タップ自動移動 |
+| 操作 | カーソルフォロー | PCでマウス方向を向く |
+| その他 | 昼夜サイクル | 7200フレーム/日、BGM自動切替 |
+| その他 | BGM/SE | Web Audio API プロシージャル生成 |
+| その他 | キャラクター選択 | タイトル画面から選択可能 |
+| その他 | PWA | Service Worker、オフライン対応 |
+| その他 | GitHub同期 | questions.csv push → iPad に自動反映 |
+| ツール | stats-viewer.html | 学習統計ビューア（フィルタ/ソート/CSVエクスポート） |
+| ツール | dashboard.js | Claude AI で弱点分析→問題自動生成（ローカルNode.js） |
+
 ## ファイル構成
 
 | ファイル | 役割 |
@@ -159,10 +191,14 @@ Three.js製の3Dマイクラ風学習ゲーム。小学生（主に2年生〜6�
 - 成功したら `localStorage(CUSTOM_Q_KEY)` にキャッシュ → オフライン時のフォールバック
 - CSVがなければ `quiz-data.js` の `QUIZ_DATA` を使用
 - `buildQuizData(rows)` で quiz-data.js と同じ構造に変換
-- **現在の questions.csv 内容**（grade2、計64問）:
-  - math: たし算・ひき算・かけ算（easy 9問 / normal 14問 / hard 9問）
-  - japanese: 読みかた・はんたいことば・漢字読み（easy 7問 / normal 8問 / hard 5問）
-  - english: 色・動物・曜日・数字・あいさつ（easy 4問 / normal 4問 / hard 2問）
+- **問題タイプ**: `type:'choice'`（デフォルト）/ `type:'write'`（テキスト入力式）
+  - write型: opt1=正解漢字、opt2〜4=空、correct=0。`_renderMiningOptions()` でテキスト入力欄表示
+  - `submitWriteAnswer()`: 入力値と opt1 を比較 → `answerMining(0 or -1)` を呼ぶ
+  - write型はリテンション出題の対象外（opts.length < 3 のため自動スキップ）
+- **現在の questions.csv 内容**（grade2、計79問）:
+  - math: たし算・ひき算・かけ算（easy 9問 / normal 14問 / hard 9問）計32問
+  - japanese: 読みかた・はんたいことば・漢字読み（計24問）＋書き取り（15問 j025-j039）計39問
+  - english: 色・動物・曜日・数字・あいさつ（easy 4問 / normal 4問 / hard 4問）計12問
 
 ### 学習履歴・適応難易度
 - **日次ログ（DAILY_LOG_KEY）**: 毎回答後 `_saveTodayLog()` で保存、起動時 `_restoreTodayLog()` で復元
@@ -249,6 +285,45 @@ Three.js製の3Dマイクラ風学習ゲーム。小学生（主に2年生〜6�
 | `SETTINGS_KEY` | `mclearn3d_settings_v1` | 設定（speed/bgmVol/seVol/difficulty） |
 | `CUSTOM_Q_KEY` | `mclearn3d_custom_q_v1` | questions.csv のパース済みキャッシュ |
 | `DAILY_LOG_KEY` | `mclearn3d_daily_v1` | 日次学習ログ（30日分、YYYY-MM-DD形式） |
+
+### 実績バッジ（ACHIEVEMENTS）
+- `ACHIEVEMENTS` 配列に25種を定義: `{ id, icon, label, cond:(state,gameState)=>boolean }`
+- `checkAchievements()`: 未解放バッジを全走査 → 条件合致で `state.achievements` に追加 → トースト
+- 解放済み判定: `state.achievements.includes(id)`
+- HUDに「🏅 N / 25」で進捗表示
+- 主なカテゴリ: 採掘系 / 建物系 / 戦闘系 (mob_1/mob_10) / 交易系 (trade_1) / レベル系
+
+### クラフトシステム（CRAFT_RECIPES）
+- `CRAFT_RECIPES`: 6レシピを定義 `{ icon, label, needs:{item:n,...}, reward:{item:n,...} or {xp:n} }`
+- `⚒️ クラフト` ボタン → `#craft-menu` パネルを開く
+- `doCraft(recipe)`: needs を在庫から差し引き、reward をインベントリに加算 → `checkAchievements()`
+
+### デイリーログインボーナス
+- ゲーム起動時に前回ログイン日付と比較 → 別の日なら `showDailyBonus()` を呼ぶ
+- ストリーク日数に応じてボーナスアイテムが増加
+- `#daily-bonus` パネルで表示、「✨ うけとる！」ボタンで受取
+
+### デイリークエスト（DAILY_QUESTS）
+- `DAILY_QUESTS`: 10種のクエストを定義（採掘N個・正解N問・モブ討伐等）
+- 毎日3クエストをランダム選択、`state.dailyQuests` に保存
+- `📋 クエスト` ボタン → `#quest-panel` で進捗確認
+- クエスト完了でXP/アイテム報酬 + `checkAchievements()`
+
+### モブ討伐（MOB_COMBAT）
+- `MOB_COMBAT`: 敵モブの戦闘パラメータ `{ hp, xp, name, drop:()=>item }`
+  - zombie: hp3/xp8、skeleton: hp3/xp8、creeper: hp4/xp10、ghast: hp5/xp15
+- `tryAttack()`: Spaceキー/⚔️ボタン押下 → 3.5u以内の敵に攻撃、20fクールダウン
+- `hitMob(mob)`: hp-- → 赤フラッシュ → hp≤0で `killMob()`
+- `killMob(mob)`: アイテムドロップ・XP付与・`totalMobKills`加算・実績チェック
+- `_updateAttackBtn()`: モバイルで近くに敵がいるときのみ⚔️ボタン表示
+
+### 村人交易（VILLAGER_DEFS）
+- `VILLAGER_DEFS`: 3NPC定義 `{ id, name, icon, x, z, skin/shirt/pants/hatCol, trades:[] }`
+  - アイテム屋さん (x:4, z:-16) / ぼうぐ屋さん (x:-13, z:-7) / まほう使い (x:17, z:12)
+- `buildVillagers()`: 起動時にバイペッドメッシュ生成・シーン配置
+- 検出距離 2.8u → ヒント表示 → インタラクトで `openTradeMenu(def)` を呼ぶ
+- `doTrade(def, trade)`: needs を在庫チェック → reward 付与 → `totalTrades` 加算 → 実績チェック
+- ループ内でゆらぎアニメ・プレイヤーに自動で向く
 
 ### 学習統計ダッシュボード（tools/dashboard.js）
 - **目的**: ゲームの正誤統計を可視化 → Claude AIが弱点分析 → 克服問題を自動生成 → questions.csv に追記してgit push
