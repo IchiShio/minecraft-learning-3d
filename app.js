@@ -124,6 +124,8 @@ const ACHIEVEMENTS = [
   { id:'login_7',        icon:'🗓️', label:'7日れんぞく ログイン！',   cond:(s)   => (s.loginStreak||0) >= 7 },
   { id:'quest_3',        icon:'📋', label:'クエスト 3かい クリア！',  cond:(s)   => (s.totalQuestsCompleted||0) >= 3 },
   { id:'quest_10',       icon:'🗺️', label:'クエスト 10かい クリア！', cond:(s)   => (s.totalQuestsCompleted||0) >= 10 },
+  { id:'mob_1',          icon:'⚔️', label:'はじめての てきを たおした！', cond:(s) => (s.totalMobKills||0) >= 1 },
+  { id:'mob_10',         icon:'🗡️', label:'てきを 10たい たおした！',    cond:(s) => (s.totalMobKills||0) >= 10 },
 ];
 
 // ===== WORLD EXPANSION ZONES =====
@@ -204,6 +206,14 @@ const MOB_TYPES = {
   sheep:    { hostile:false, speed:0.015, chaseR:0,  fleeR:5,  skin:'#D8D8C0', shirt:'#DDDDC8', pants:'#D0D0B8', shoes:'#B0B0A0', flying:false, burnDay:false, chargeRange:0   },
   chicken:  { hostile:false, speed:0.012, chaseR:0,  fleeR:4,  skin:'#FFFFFF', shirt:'#EEEEEE', pants:'#FFB040', shoes:'#FF8800', flying:false, burnDay:false, chargeRange:0   },
   ghast:    { hostile:true,  speed:0.013, chaseR:20, fleeR:0,  skin:'#F0F0F0', shirt:'#F8F8F8', pants:'#E8E8E8', shoes:'#D8D8D8', flying:true,  burnDay:false, chargeRange:0   },
+};
+
+// ===== MOB COMBAT =====
+const MOB_COMBAT = {
+  zombie:   { hp: 3, xp:  8, name:'ゾンビ',    drop: () => Math.random() < 0.5 ? 'wood'  : 'stone' },
+  skeleton: { hp: 3, xp:  8, name:'スケルトン', drop: () => Math.random() < 0.6 ? 'stone' : 'iron'  },
+  creeper:  { hp: 4, xp: 10, name:'クリーパー', drop: () => 'stone'                                  },
+  ghast:    { hp: 5, xp: 15, name:'ガスト',     drop: () => 'iron'                                   },
 };
 
 // ゲーム1日の長さ(フレーム)、モブ上限
@@ -307,6 +317,7 @@ class Game {
     this.playerMaxHp = 6;
     this.playerHp = 6;
     this.invincibleTimer = 0;
+    this.playerAttackCd = 0;
     this.zoneDecorMeshes = {}; // ゾーンごとのデコレーションメッシュ
     this.mobs = [];
     this.fireballs = [];
@@ -1750,7 +1761,7 @@ class Game {
         t2.position.set(tx*0.37, -hs/2-th/2, tz*0.37); g.add(t2);
       }
       g.position.set(spawnX, 9+Math.random()*2, spawnZ);
-      g.userData = { type, def, state:'wander', wanderTimer:0, wanderDx:0, wanderDz:0, fireCooldown:Math.floor(120+Math.random()*180), legL:null, legR:null };
+      g.userData = { type, def, state:'wander', wanderTimer:0, wanderDx:0, wanderDz:0, fireCooldown:Math.floor(120+Math.random()*180), legL:null, legR:null, hp: MOB_COMBAT[type]?.hp ?? 999 };
       return g;
     }
 
@@ -1808,7 +1819,7 @@ class Game {
       bow.position.set(hs*0.76+0.14, lh+bh*0.5, 0.12); g.add(bow);
     }
     g.position.set(spawnX, 0, spawnZ);
-    g.userData = { type, def, state:'wander', wanderTimer:0, wanderDx:0, wanderDz:0, fireCooldown:9999, legL, legR };
+    g.userData = { type, def, state:'wander', wanderTimer:0, wanderDx:0, wanderDz:0, fireCooldown:9999, legL, legR, hp: MOB_COMBAT[type]?.hp ?? 999 };
     return g;
   }
 
@@ -2226,6 +2237,7 @@ class Game {
     addEventListener('keydown', e => {
       this.keys[e.key] = true;
       if (e.key === 'e' || e.key === 'E') this.tryInteract();
+      if (e.key === ' ') { e.preventDefault(); this.tryAttack(); }
     });
     addEventListener('keyup', e => { this.keys[e.key] = false; });
 
@@ -2399,6 +2411,68 @@ class Game {
     document.getElementById('char-select').classList.remove('hidden');
   }
 
+  // ===== MOB COMBAT =====
+  tryAttack() {
+    if (this.insideBuilding || !this.gameRunning) return;
+    if (this.playerAttackCd > 0) return;
+    const px = this.player.position.x, pz = this.player.position.z;
+    let closest = null, closestD = 3.5;
+    for (const mob of this.mobs) {
+      if (!MOB_COMBAT[mob.userData.type]) continue;
+      const dx = mob.position.x - px, dz = mob.position.z - pz;
+      const d = Math.sqrt(dx * dx + dz * dz);
+      if (d < closestD) { closestD = d; closest = mob; }
+    }
+    if (!closest) return;
+    this.hitMob(closest);
+    this.playerAttackCd = 20;
+    this.playSe('correct');
+  }
+
+  hitMob(mob) {
+    mob.userData.hp--;
+    mob.traverse(c => {
+      if (c.isMesh) {
+        const orig = c.material.color.clone();
+        c.material.color.set(0xff4444);
+        setTimeout(() => { if (c.material) c.material.color.copy(orig); }, 120);
+      }
+    });
+    if (mob.userData.hp <= 0) this.killMob(mob);
+  }
+
+  killMob(mob) {
+    const cbt = MOB_COMBAT[mob.userData.type];
+    this.scene.remove(mob);
+    this.mobs = this.mobs.filter(m => m !== mob);
+    if (!cbt) return;
+    const item = cbt.drop();
+    const icon = RESOURCE_DEFS[item]?.icon || '💎';
+    this.state.inventory[item] = (this.state.inventory[item] || 0) + 1;
+    this.spawnFloatingItem(mob.position.clone(), icon);
+    this.addXP(cbt.xp);
+    this.showToast(`💀 ${cbt.name}を たおした！\n＋${cbt.xp}XP`, 1800);
+    this.state.totalMobKills = (this.state.totalMobKills || 0) + 1;
+    this.checkAchievements();
+    this.saveState();
+    this._updateInventoryHud();
+  }
+
+  _updateAttackBtn() {
+    const btn = document.getElementById('btn-attack');
+    if (!btn) return;
+    if (!this.gameRunning || this.insideBuilding || !this.isMobile) { btn.classList.add('hidden'); return; }
+    const px = this.player.position.x, pz = this.player.position.z;
+    let hasTarget = false;
+    for (const mob of this.mobs) {
+      if (!MOB_COMBAT[mob.userData.type]) continue;
+      const dx = mob.position.x - px, dz = mob.position.z - pz;
+      if (Math.sqrt(dx * dx + dz * dz) < 3.5) { hasTarget = true; break; }
+    }
+    btn.classList.toggle('hidden', !hasTarget);
+    btn.disabled = this.playerAttackCd > 0;
+  }
+
   // ===== GAME LOOP =====
   loop() {
     requestAnimationFrame(() => this.loop());
@@ -2422,6 +2496,9 @@ class Game {
         this._updateHpHud();
       }
     }
+    // Attack cooldown
+    if (this.playerAttackCd > 0) this.playerAttackCd--;
+    if (this.frame % 5 === 0) this._updateAttackBtn();
     // Animate building action indicator
     if (this.actionIndicatorMesh) {
       this.actionIndicatorMesh.position.y = 1.5 + Math.sin(this.frame * 0.06) * 0.18;
@@ -3995,6 +4072,11 @@ addEventListener('load', () => {
         document.getElementById('btn-quest-close').addEventListener('click', () => {
           document.getElementById('quest-panel').classList.add('hidden');
         });
+
+        // 攻撃ボタン（モバイル）
+        const btnAtk = document.getElementById('btn-attack');
+        btnAtk.addEventListener('click', () => game.tryAttack());
+        btnAtk.addEventListener('touchend', e => { e.preventDefault(); game.tryAttack(); });
 
         // 建物から出るボタン
         document.getElementById('btn-exit-building').addEventListener('click', () => {

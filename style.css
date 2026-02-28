@@ -655,6 +655,15 @@ html, body {
 }
 .dpad-btn:active { background: rgba(255,255,255,0.3); transform: scale(0.93); }
 
+#right-btns {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+  justify-content: flex-end;
+  padding-bottom: 4px;
+}
+
 #btn-interact {
   pointer-events: all;
   width: 90px; height: 90px;
@@ -673,6 +682,27 @@ html, body {
 }
 #btn-interact.hidden { display: none; }
 #btn-interact:active { transform: scale(0.92); }
+
+#btn-attack {
+  pointer-events: all;
+  width: 84px; height: 84px;
+  background: linear-gradient(180deg, #ff6655, #cc2211);
+  border: 3px solid #ff9988;
+  border-bottom: 5px solid #991100;
+  border-radius: 50%;
+  font-size: 1.15rem;
+  font-weight: 900;
+  line-height: 1.2;
+  cursor: pointer;
+  color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  flex-direction: column;
+  text-align: center;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+}
+#btn-attack.hidden { display: none; }
+#btn-attack:disabled { opacity: 0.45; }
+#btn-attack:active { transform: scale(0.92); }
 
 /* ===== QUIZ MODAL ===== */
 #quiz-overlay {
