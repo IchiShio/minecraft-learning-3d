@@ -469,7 +469,7 @@ class Game {
       const obj = {};
       headers.forEach((h, i) => { obj[h] = vals[i] !== undefined ? vals[i] : ''; });
       return obj;
-    }).filter(r => r.subject && r.question && r.opt1 && r.opt2);
+    }).filter(r => r.subject && r.question && r.opt1 && (r.opt2 || r.type === 'write'));
   }
 
   buildQuizData(rows) {
@@ -491,6 +491,7 @@ class Game {
         correct: parseInt(r.correct) || 0,
         explain: r.explain || '',
         diff: r.diff || 'normal',
+        type: r.type || 'choice',
       });
     });
     return data;
@@ -3607,15 +3608,7 @@ class Game {
     document.getElementById('mining-item-name').textContent = `${def.name}をGetしよう！`;
     document.getElementById('mining-question').textContent = q.q;
 
-    const optsEl = document.getElementById('mining-options');
-    optsEl.innerHTML = '';
-    q.opts.forEach((opt, i) => {
-      const btn = document.createElement('button');
-      btn.className = 'mining-option';
-      btn.textContent = opt;
-      btn.onclick = () => this.answerMining(i);
-      optsEl.appendChild(btn);
-    });
+    this._renderMiningOptions(q);
 
     document.getElementById('mining-feedback').classList.add('hidden');
     document.getElementById('mining-popup').classList.remove('hidden');
@@ -3632,18 +3625,55 @@ class Game {
     document.getElementById('mining-item-name').textContent = '宝箱を あけよう！';
     document.getElementById('mining-question').textContent = q.q;
 
-    const optsEl = document.getElementById('mining-options');
-    optsEl.innerHTML = '';
-    q.opts.forEach((opt, i) => {
-      const btn = document.createElement('button');
-      btn.className = 'mining-option';
-      btn.textContent = opt;
-      btn.onclick = () => this.answerMining(i);
-      optsEl.appendChild(btn);
-    });
+    this._renderMiningOptions(q);
 
     document.getElementById('mining-feedback').classList.add('hidden');
     document.getElementById('mining-popup').classList.remove('hidden');
+  }
+
+  _renderMiningOptions(q) {
+    const optsEl = document.getElementById('mining-options');
+    optsEl.innerHTML = '';
+    if (q.type === 'write') {
+      const wrap = document.createElement('div');
+      wrap.className = 'write-input-wrap';
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'write-answer-input';
+      input.placeholder = 'かんじで かいてね';
+      input.maxLength = 4;
+      input.autocomplete = 'off';
+      const btn = document.createElement('button');
+      btn.className = 'write-submit-btn';
+      btn.textContent = '✓ こたえる';
+      btn.onclick = () => this.submitWriteAnswer();
+      input.addEventListener('keydown', e => { if (e.key === 'Enter') this.submitWriteAnswer(); });
+      wrap.appendChild(input);
+      wrap.appendChild(btn);
+      optsEl.appendChild(wrap);
+      setTimeout(() => input.focus(), 80);
+    } else {
+      q.opts.forEach((opt, i) => {
+        const btn = document.createElement('button');
+        btn.className = 'mining-option';
+        btn.textContent = opt;
+        btn.onclick = () => this.answerMining(i);
+        optsEl.appendChild(btn);
+      });
+    }
+  }
+
+  submitWriteAnswer() {
+    if (!this.mining || !this.mining.q) return;
+    const input = document.querySelector('.write-answer-input');
+    if (!input || input.disabled) return;
+    const val = input.value.trim();
+    if (!val) return;
+    input.disabled = true;
+    const submitBtn = document.querySelector('.write-submit-btn');
+    if (submitBtn) submitBtn.disabled = true;
+    const correct = this.mining.q.opts[0];
+    this.answerMining(val === correct ? 0 : -1);
   }
 
   answerMining(idx) {

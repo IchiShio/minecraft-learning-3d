@@ -1042,6 +1042,29 @@ html, body {
 .mining-feedback.correct { background: rgba(0,200,0,0.2); color: #7dff4f; }
 .mining-feedback.wrong   { background: rgba(200,0,0,0.2); color: #ff8888; }
 
+/* ===== WRITE (書き取り) INPUT ===== */
+.write-input-wrap {
+  display: flex; gap: 8px; align-items: center;
+  justify-content: center; margin-bottom: 12px;
+}
+.write-answer-input {
+  font-family: inherit; font-size: 2rem; font-weight: 900;
+  width: 80px; text-align: center;
+  background: #1a2a1a; color: #fff;
+  border: 3px solid #4a8a20; border-radius: 10px;
+  padding: 8px 4px; outline: none;
+}
+.write-answer-input:focus { border-color: #7dff4f; }
+.write-answer-input:disabled { opacity: 0.6; }
+.write-submit-btn {
+  font-family: inherit; font-size: 1rem; font-weight: 900;
+  background: linear-gradient(180deg,#5a9a20,#3a7010);
+  color: #fff; border: 3px solid #7dff4f; border-radius: 10px;
+  padding: 10px 16px; cursor: pointer;
+}
+.write-submit-btn:active { transform: scale(0.97); }
+.write-submit-btn:disabled { opacity: 0.45; cursor: default; }
+
 /* ===== CSV UPDATE POPUP ===== */
 #update-popup {
   position: fixed; inset: 0; z-index: 900;

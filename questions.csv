@@ -12,7 +12,7 @@
 # ※ この行（#で始まる行）はコメントとして無視されます
 # ※ CSVを編集したらGitHubにpushするとタブレットに自動反映されます
 # ※ 問題を削除するときはその行を消すだけでOK（IDは再利用しないこと）
-subject,grade,id,question,opt1,opt2,opt3,opt4,correct,explain,diff
+subject,grade,id,question,opt1,opt2,opt3,opt4,correct,explain,diff,type
 math,2,m001,2 ＋ 3 ＝ ？,4,5,6,7,1,たすと5になるよ！,easy
 math,2,m002,10 ー 4 ＝ ？,5,6,7,8,1,10から4をひくと6だよ,easy
 math,2,m003,3 × 4 ＝ ？,10,11,12,13,2,3を4かいたすと12だよ,normal
@@ -77,3 +77,18 @@ english,2,e009,りんごは英語で？,orange,banana,apple,grape,2,りんごは
 english,2,e010,7・8・9を英語で？,seven eight nine,five six seven,six seven eight,eight nine ten,0,7はseven 8はeight 9はnineだよ,normal
 english,2,e011,白は英語で？,black,gray,white,pink,2,白はwhiteだよ,hard
 english,2,e012,「Good morning」のいみは？,こんばんは,おはよう,こんにちは,さようなら,1,Good morningはおはようのいみだよ,hard
+japanese,2,j025,「かわ」をかんじで かいてね！,川,,,,0,川はかわとよむよ,easy,write
+japanese,2,j026,「やま」をかんじで かいてね！,山,,,,0,山はやまとよむよ,easy,write
+japanese,2,j027,「き」をかんじで かいてね！,木,,,,0,木はきとよむよ,easy,write
+japanese,2,j028,「ひ」をかんじで かいてね！,火,,,,0,火はひとよむよ,easy,write
+japanese,2,j029,「みず」をかんじで かいてね！,水,,,,0,水はみずとよむよ,easy,write
+japanese,2,j030,「ほし」をかんじで かいてね！,星,,,,0,星はほしとよむよ,normal,write
+japanese,2,j031,「うみ」をかんじで かいてね！,海,,,,0,海はうみとよむよ,normal,write
+japanese,2,j032,「はる」をかんじで かいてね！,春,,,,0,春ははるとよむよ,normal,write
+japanese,2,j033,「なつ」をかんじで かいてね！,夏,,,,0,夏はなつとよむよ,normal,write
+japanese,2,j034,「かぜ」をかんじで かいてね！,風,,,,0,風はかぜとよむよ,normal,write
+japanese,2,j035,「ゆき」をかんじで かいてね！,雪,,,,0,雪はゆきとよむよ,hard,write
+japanese,2,j036,「とり」をかんじで かいてね！,鳥,,,,0,鳥はとりとよむよ,hard,write
+japanese,2,j037,「あき」をかんじで かいてね！,秋,,,,0,秋はあきとよむよ,hard,write
+japanese,2,j038,「ふゆ」をかんじで かいてね！,冬,,,,0,冬はふゆとよむよ,hard,write
+japanese,2,j039,「ひかり」をかんじで かいてね！,光,,,,0,光はひかりとよむよ,hard,write
