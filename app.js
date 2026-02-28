@@ -3635,23 +3635,7 @@ class Game {
     const optsEl = document.getElementById('mining-options');
     optsEl.innerHTML = '';
     if (q.type === 'write') {
-      const wrap = document.createElement('div');
-      wrap.className = 'write-input-wrap';
-      const input = document.createElement('input');
-      input.type = 'text';
-      input.className = 'write-answer-input';
-      input.placeholder = 'かんじで かいてね';
-      input.maxLength = 4;
-      input.autocomplete = 'off';
-      const btn = document.createElement('button');
-      btn.className = 'write-submit-btn';
-      btn.textContent = '✓ こたえる';
-      btn.onclick = () => this.submitWriteAnswer();
-      input.addEventListener('keydown', e => { if (e.key === 'Enter') this.submitWriteAnswer(); });
-      wrap.appendChild(input);
-      wrap.appendChild(btn);
-      optsEl.appendChild(wrap);
-      setTimeout(() => input.focus(), 80);
+      this._createHandwritePad(optsEl, q);
     } else {
       q.opts.forEach((opt, i) => {
         const btn = document.createElement('button');
@@ -3663,17 +3647,156 @@ class Game {
     }
   }
 
-  submitWriteAnswer() {
-    if (!this.mining || !this.mining.q) return;
-    const input = document.querySelector('.write-answer-input');
-    if (!input || input.disabled) return;
-    const val = input.value.trim();
-    if (!val) return;
-    input.disabled = true;
-    const submitBtn = document.querySelector('.write-submit-btn');
-    if (submitBtn) submitBtn.disabled = true;
-    const correct = this.mining.q.opts[0];
-    this.answerMining(val === correct ? 0 : -1);
+  _createHandwritePad(container, q) {
+    const SIZE = 280;
+    const wrap = document.createElement('div');
+    wrap.className = 'handwrite-wrap';
+
+    const canvas = document.createElement('canvas');
+    canvas.width = SIZE;
+    canvas.height = SIZE;
+    canvas.className = 'handwrite-canvas';
+    const ctx = canvas.getContext('2d');
+
+    const strokeCanvas = document.createElement('canvas');
+    strokeCanvas.width = SIZE;
+    strokeCanvas.height = SIZE;
+    const sc = strokeCanvas.getContext('2d');
+    sc.strokeStyle = '#e8ffe8';
+    sc.lineWidth = 18;
+    sc.lineCap = 'round';
+    sc.lineJoin = 'round';
+
+    const drawGuide = () => {
+      ctx.clearRect(0, 0, SIZE, SIZE);
+      ctx.save();
+      ctx.font = `bold ${Math.floor(SIZE * 0.70)}px serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = 'rgba(100,200,100,0.12)';
+      ctx.fillText(q.opts[0], SIZE / 2, SIZE / 2);
+      ctx.restore();
+      ctx.drawImage(strokeCanvas, 0, 0);
+    };
+    drawGuide();
+
+    let drawing = false;
+    let hasStrokes = false;
+
+    const getPos = e => {
+      const rect = canvas.getBoundingClientRect();
+      const src = e.touches ? e.touches[0] : e;
+      return {
+        x: (src.clientX - rect.left) * (SIZE / rect.width),
+        y: (src.clientY - rect.top) * (SIZE / rect.height)
+      };
+    };
+    const startDraw = e => {
+      e.preventDefault();
+      const p = getPos(e);
+      sc.beginPath();
+      sc.moveTo(p.x, p.y);
+      drawing = true;
+      hasStrokes = true;
+    };
+    const moveDraw = e => {
+      e.preventDefault();
+      if (!drawing) return;
+      const p = getPos(e);
+      sc.lineTo(p.x, p.y);
+      sc.stroke();
+      sc.beginPath();
+      sc.moveTo(p.x, p.y);
+      drawGuide();
+    };
+    const endDraw = e => {
+      e.preventDefault();
+      drawing = false;
+      sc.beginPath();
+    };
+
+    canvas.addEventListener('touchstart', startDraw, { passive: false });
+    canvas.addEventListener('touchmove', moveDraw, { passive: false });
+    canvas.addEventListener('touchend', endDraw, { passive: false });
+    canvas.addEventListener('mousedown', startDraw);
+    canvas.addEventListener('mousemove', moveDraw);
+    canvas.addEventListener('mouseup', endDraw);
+    canvas.addEventListener('mouseleave', endDraw);
+
+    const btnRow = document.createElement('div');
+    btnRow.className = 'handwrite-btns';
+
+    const clearBtn = document.createElement('button');
+    clearBtn.className = 'handwrite-clear-btn';
+    clearBtn.textContent = '🗑 けす';
+    clearBtn.onclick = () => {
+      sc.clearRect(0, 0, SIZE, SIZE);
+      hasStrokes = false;
+      drawGuide();
+    };
+
+    const submitBtn = document.createElement('button');
+    submitBtn.className = 'write-submit-btn';
+    submitBtn.textContent = '✓ こたえる';
+    submitBtn.onclick = () => {
+      if (!hasStrokes) return;
+      submitBtn.disabled = true;
+      clearBtn.disabled = true;
+      const ok = this._evaluateHandwriting(strokeCanvas, q.opts[0], SIZE);
+      this.answerMining(ok ? 0 : -1);
+    };
+
+    btnRow.appendChild(clearBtn);
+    btnRow.appendChild(submitBtn);
+    wrap.appendChild(canvas);
+    wrap.appendChild(btnRow);
+    container.appendChild(wrap);
+  }
+
+  _evaluateHandwriting(strokeCanvas, targetKanji, size) {
+    const gs = 64;
+
+    const refC = document.createElement('canvas');
+    refC.width = refC.height = gs;
+    const rc = refC.getContext('2d');
+    rc.fillStyle = '#fff';
+    rc.font = `bold ${Math.floor(gs * 0.70)}px serif`;
+    rc.textAlign = 'center';
+    rc.textBaseline = 'middle';
+    rc.fillText(targetKanji, gs / 2, gs / 2);
+    const refPx = rc.getImageData(0, 0, gs, gs).data;
+
+    const userC = document.createElement('canvas');
+    userC.width = userC.height = gs;
+    userC.getContext('2d').drawImage(strokeCanvas, 0, 0, gs, gs);
+    const userPx = userC.getContext('2d').getImageData(0, 0, gs, gs).data;
+
+    const dil = 7;
+    const dilated = new Uint8Array(gs * gs);
+    for (let py = 0; py < gs; py++) {
+      for (let px = 0; px < gs; px++) {
+        if (refPx[(py * gs + px) * 4 + 3] > 80) {
+          const y0 = Math.max(0, py - dil), y1 = Math.min(gs - 1, py + dil);
+          const x0 = Math.max(0, px - dil), x1 = Math.min(gs - 1, px + dil);
+          for (let dy = y0; dy <= y1; dy++)
+            for (let dx = x0; dx <= x1; dx++)
+              dilated[dy * gs + dx] = 1;
+        }
+      }
+    }
+
+    let userPxCount = 0, hitCount = 0;
+    for (let i = 0; i < gs * gs; i++) {
+      if (userPx[i * 4 + 3] > 50) {
+        userPxCount++;
+        if (dilated[i]) hitCount++;
+      }
+    }
+
+    if (userPxCount < 8) return false;
+    const precision = hitCount / userPxCount;
+    console.log(`[handwrite] kanji=${targetKanji} precision=${precision.toFixed(2)} userPx=${userPxCount}`);
+    return precision >= 0.50;
   }
 
   answerMining(idx) {
